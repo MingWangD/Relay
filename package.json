@@ -1,0 +1,53 @@
+{
+  "name": "codex2anti",
+  "version": "0.1.3",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "postinstall": "node scripts/prepare-pty.mjs",
+    "dev": "tsx src/server/main.ts --dev",
+    "build": "tsc --noEmit && vite build",
+    "start": "tsx src/server/main.ts",
+    "test": "tsx --test test/*.test.ts test/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "doctor": "tsx src/server/doctor.ts",
+    "test:e2e": "playwright test",
+    "macos:check": "node scripts/package-macos.mjs --check",
+    "macos:icon": "node scripts/build-macos-icon.mjs",
+    "macos:build": "node scripts/package-macos.mjs --app",
+    "macos:package": "node scripts/package-macos.mjs --dmg",
+    "macos:appcast": "node scripts/appcast.mjs",
+    "macos:release-check": "node scripts/release-check.mjs",
+    "macos:smoke": "node scripts/macos-smoke.mjs",
+    "macos:test": "node scripts/macos-test.mjs",
+    "macos:notices": "node scripts/third-party-notices.mjs",
+    "macos:preview-assets": "node scripts/preview-assets.mjs",
+    "macos:preview-draft": "node scripts/publish-preview.mjs --draft",
+    "macos:preview-publish": "node scripts/publish-preview.mjs --publish"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-serialize": "0.14.0",
+    "@xterm/headless": "6.0.0",
+    "@xterm/xterm": "6.0.0",
+    "express": "5.2.1",
+    "node-pty": "1.1.0",
+    "tsx": "^4.23.15",
+    "ws": "8.22.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.4",
+    "@types/ws": "8.18.2",
+    "prettier": "3.9.9",
+    "typescript": "7.0.2",
+    "vite": "8.3.2"
+  },
+  "license": "MIT"
+}

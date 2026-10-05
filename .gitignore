@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.local/
+test-results/
+playwright-report/
+macos/RelayApp/.build/
+dist-macos/
+*.log
+.DS_Store
