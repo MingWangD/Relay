@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安装、使用与排障
+    url: https://github.com/MingWangD/Relay/blob/main/docs/README.md
+    about: 先查看文档及已知限制。
+  - name: 私密报告安全漏洞
+    url: https://github.com/MingWangD/Relay/security/advisories/new
+    about: 认证、越权或数据泄露请使用私密入口，不要公开凭据。

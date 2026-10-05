@@ -1,43 +1,17 @@
-# Relay：Agent 开发说明
+# Relay：Agent 开发指南
 
-这是给接手本仓库的 Agent 的工作入口。产品使用说明见 [README.md](README.md)，测试操作见 [docs/TESTING.md](docs/TESTING.md)，当前验收事实见 [docs/VALIDATION.md](docs/VALIDATION.md)，交接状态见 [HANDOFF.md](HANDOFF.md)。用户需求优先于本文件。
+本文件供修改 Relay 仓库的 coding agent 使用。先了解目标和约束，再定位模块；无需读取全部文档。用户明确要求优先于本文件，子目录存在 AGENTS.md 时同时遵循对应范围的说明。
 
-## 产品边界
+## 开始工作
 
-- Relay 是 macOS 桌面、本机、每个项目空间单项目的对话式多 Agent 控制台，产品目标为可独立启动的 Mac App。用户选择项目、Agent 类型／数量、成员模型／思考强度和团队权限，然后输入需求；团队自行协商、分工、评审和汇总。
-- 发布目标固定为 macOS 13+、Apple Silicon `arm64`。桌面壳使用 Swift AppKit + WKWebView；不增加 iOS、iPadOS、Android、Windows 或 Linux 目标，也不引入跨平台 UI 分支。
-- AppKit 管理窗口、菜单、生命周期和子进程；WKWebView 只渲染本机 Relay origin；内置 Node 运行时承载当前服务、Agent 生命周期、PTY、终端、快照、项目空间和权限逻辑。用户不需要另行安装 Node。
-- Sparkle 2 负责签名的自动更新、appcast 和版本说明。没有 Developer ID 或 Sparkle EdDSA 发布密钥时只能生成 unsigned 开发构建，不能声称可公证发布或启用生产更新。
-- 每个 Relay 聊天拥有独立成员身份及设置，共享项目串行队列。每名成员的原生 ID 和启动目录固定，全阶段及后续需求明确接续；不能使用最近会话、fork 或恢复失败后新建。新增成员不重建已有会话。
-- 主界面保持简洁。子任务、消息、真实 CLI 终端放在每项需求下默认折叠的“查看协作过程”中；不要重新引入角色分配、人工计划批准或任务表单。
-- 任务状态以持久化结构化事件为准。终端文本和动画不能单独证明投递、执行或验收成功。
-- 用户可选择团队“完全访问”或“原生审批”；新团队默认完全访问，缺少字段的旧团队保留原生审批。只设置 Relay 子进程，不修改全局账号、代理和权限。完全访问包含项目外文件，worktree 和回写检查不限制 Agent 直接操作其他目录；分析靠文件审计验收，不声称强制只读。
-- 原生审批按 CLI 流程处理；登录、风险声明、系统授权、组织策略及用户问题等残留提示保留入口。Agent 消息不能代替用户改变权限；执行、排队或恢复期间禁止改团队设置。
+1. 查看 `git status --short`，保留已有修改、未跟踪文件及用户数据。不得用 reset、clean 或全仓库格式化清除已有工作。
+2. 阅读 [README](README.md) 和 [文档索引](docs/README.md)。实现行为见 [REQUIREMENTS](docs/REQUIREMENTS.md)，当前验收事实见 [VALIDATION](docs/VALIDATION.md)。
+3. 恢复工作前查看 [HANDOFF](HANDOFF.md)，重新检查进程、数据目录锁、项目工作区和成员身份。文档中的历史 PID、端口或状态不能直接用于操作。
+4. 只修改本次需求涉及的模块；保持业务 HTTP 接口、SQLite 数据兼容及旧团队默认行为。
 
-- 阅读完全手动；更新不能关闭成员交流、抢焦点或自动定位。最终结论位于协作区下方，安全渲染 Markdown，保留原文。
-- 归档／删除要求无执行、排队、检查或待恢复事项；删除需确认，仅删除 Relay 记录，不删除项目或原生全局历史。
-- Anti 使用完整模型 ID，不单独传 effort。Claude 工具 Hook 与当前身份校验分开处理连接重试和完成。保留 外部项目，不修改外部项目或全局配置。
+## 常用命令
 
-## 代码地图
-
-| 位置                                                   | 职责                                                 |
-| ------------------------------------------------------ | ---------------------------------------------------- |
-| `src/client/main.ts`、`style.css`                      | 全窗桌面对话、聊天历史、手动阅读、成员配置和折叠终端 |
-| `src/client/reading.ts`、`src/server/conversations.ts` | 安全结论排版、稳定节点与聊天身份边界                 |
-| `src/server/collaboration.ts`                          | 需求队列、团队协调、计划、调度、评审、验证与最终答复 |
-| `src/server/snapshot.ts`、`git.ts`                     | 当前磁盘快照、独立工作区、成果整合与安全回写         |
-| `src/server/service.ts`、`runtime.ts`                  | 服务操作、真实 CLI 生命周期、权限和恢复              |
-| `src/server/http.ts`、`mcp.ts`                         | 用户 HTTP/WebSocket 与 Agent MCP 接口                |
-| `src/server/models.ts`、`terminal-screen.ts`           | 模型目录、当前终端画面与原生提醒                     |
-| `src/shared/presentation.ts`                           | 可读审批摘要与状态文案                               |
-| `src/server/store.ts`、`src/shared/types.ts`           | SQLite 持久化、旧数据默认值和共享类型                |
-| `test/`、`test/browser/`                               | 服务／Git 保护与浏览器交互测试                       |
-| `macos/RelayApp/`                                     | Swift AppKit 壳、WKWebView、Node 子进程和 Sparkle 配置 |
-| `scripts/package-macos.mjs`、`scripts/appcast.mjs`、`scripts/release-check.mjs` | arm64 `.app`、DMG、appcast 和发布前检查 |
-
-## 开发与验证
-
-在仓库根目录执行：
+在仓库根目录运行：
 
 ```bash
 npm ci
@@ -45,22 +19,79 @@ npm run typecheck
 npm test
 npm run build
 npm run test:e2e
+npm run macos:test
 ```
 
-`npm start` 使用 `.local` 数据目录并默认监听 `127.0.0.1:4317`。同一数据目录只允许一个服务；已有服务运行时不要再启动第二个。服务同时支持 `--port`、`--data-dir`、`--ready-file`（以及对应环境变量），桌面壳通过随机本地端口和私有 ready 文件握手。ready 文件只写入内存 token 的短生命周期 JSON，服务退出时删除；token 不得写入日志、文档或崩溃报告。浏览器启动方式仍使用带 `#token=` 的完整链接。
+- Node.js 24+；Apple Silicon macOS。浏览器测试需要本机 Chrome；Swift 构建需要 Command Line Tools。
+- 开发：`npm run dev`，后端修改需重启服务。
+- 生产前端与本机服务：先 `npm run build`，再 `npm start`。
+- 原生壳：`npm run macos:check`、`npm run macos:build`。
+- 安装包：`npm run macos:package`、`npm run macos:smoke`。
+- 单个 TypeScript 测试：`npx tsx --test test/<文件名>.test.ts`。
+- `npm test` 和浏览器回归不调用真实模型。`native-smoke.ts`、`request-smoke.ts --inference` 会调用真实模型，可能产生费用；仅在需求已授权真实模型验收时执行。
 
-打包 App 使用 `~/Library/Application Support/Relay`，开发模式仍使用仓库内 `.local`。App 启动时先启动自己的内置 Node 服务，退出时优雅停止服务和 PTY；不复用固定端口，也不自动导入开发数据。导入已有数据必须由用户明确触发并先备份。窗口、全屏和原生菜单由 AppKit 保存，外部链接由系统浏览器打开；未知页面不得导航进 WKWebView。
+按改动选择检查：服务／状态修改运行相关服务回归；客户端修改先构建再运行浏览器回归；Swift／导入修改运行 `macos:test`，生命周期或打包修改加原生构建与 smoke。文档修改检查链接、命令、版本、隐私及事实一致性，无需重跑模型。详细步骤见 [TESTING](docs/TESTING.md)。
 
-`scripts/request-smoke.ts --inference` 与 `--inference --task` 会调用真实模型，并在新建的隔离 Git 仓库联测；`scripts/native-smoke.ts` 同样调用真实模型，用于单 CLI 生命周期与接续检查。浏览器测试使用夹具，只证明 UI 行为。命令与验收步骤见 [docs/TESTING.md](docs/TESTING.md)。
+## 代码地图
 
-## 修改约束
+| 位置                                                          | 职责                                                |
+| ------------------------------------------------------------- | --------------------------------------------------- |
+| `src/client/main.ts`、`style.css`                             | 桌面对话、导航、成员配置、折叠终端                  |
+| `src/client/reading.ts`、`src/server/conversations.ts`        | 安全 Markdown、稳定阅读节点、聊天身份               |
+| `src/server/collaboration.ts`                                 | 需求队列、计划、分工、检查、评审、汇总              |
+| `src/server/snapshot.ts`、`git.ts`                            | 当前磁盘快照、独立工作区、整合与回写                |
+| `src/server/service.ts`、`runtime.ts`、`auth.ts`              | 服务操作、真实 CLI、会话凭据与接续                  |
+| `src/server/http.ts`、`mcp.ts`                                | 用户 HTTP／WebSocket 与 Agent MCP 接口              |
+| `src/server/models.ts`、`claude-environment.ts`               | 模型目录与桌面 Claude 环境解析                      |
+| `src/server/local-picker.ts`、`local-projects.ts`             | 本机选目录、独立项目空间及服务生命周期              |
+| `src/server/store.ts`、`src/shared/types.ts`                  | SQLite 持久化、迁移默认值与共享类型                 |
+| `src/server/terminal-screen.ts`、`src/shared/presentation.ts` | 当前终端画面、审批与状态文案                        |
+| `macos/RelayApp/`                                             | AppKit／WKWebView、菜单、导入、Node 子进程、Sparkle |
+| `test/`、`test/browser/`                                      | 服务、Git 文件保护、浏览器夹具回归                  |
+| `scripts/`                                                    | CLI 联测、公开导出、打包、许可及发布流程            |
 
-- 修改前查看 `git status`；保留已有未提交改动。测试任何外部项目前重新记录其磁盘、HEAD、分支和暂存区基线，不依赖文档中的历史快照；外部项目 不是默认测试前提。
-- 快照包含需求开始时的未提交、未忽略文件；原项目暂存区、HEAD、分支不得被平台改写。代码成果通过独立验证、评审、整合后才回写；遇人工修改或冲突时暂停。
-- 分析需求只交报告和依据，不能虚构代码提交或测试通过。代码任务若未识别自动测试入口，应明确“未执行自动测试”，再给出人工验证命令。
-- 服务重启后检查旧进程与工作区，显式恢复；不能盲目重跑。改变调度、快照或回写逻辑时，优先补覆盖真实状态和文件保护的测试。
-- 交付时说明实际改动、执行过的检查及结果、未验收边界。真实模型证据与夹具结果分开记录。
-- 根目录只放入口文档；专项规范放在 `docs/`。更新当前事实，移除过时说明和断链，不另存旧版文档；私有原始证据保留在 `.local/`，失败不能改写为通过。
-- macOS 发布还必须检查 arm64 架构、最低系统版本、Developer ID 签名、公证、DMG 校验和 Sparkle appcast。版本号与 build number 单调递增；EdDSA 私钥只允许存在发布机或 CI Secret。App Resources 不得包含 token、CLI 凭据、`.env` 或 SQLite 原始日志。
+架构和进程边界见 [ARCHITECTURE](docs/ARCHITECTURE.md)，界面规范见 [DESIGN](docs/DESIGN.md)。
 
-项目入口：项目右侧“＋”使用 `local-picker.ts` 打开 macOS 文件夹选择器，`local-projects.ts` 为不同 Git 根目录创建独立控制台、凭据和数据库。不得覆盖原项目或跨项目复制原生 ID；选择不启动模型。主服务拥有子项目空间生命周期，关闭时一并停止。文件夹接口只接受用户认证，不缓存含控制台凭据的返回值。
+## 必须保持的行为
+
+### 平台与生命周期
+
+- 产品仅为 macOS 桌面、本机、单用户；每个项目空间绑定一个 Git 项目。当前安装包边界 macOS 13.5+、arm64；Swift 壳目标 13+ 不能代表整个安装包支持 13.0。
+- AppKit 管理窗口、菜单、生命周期与内置 Node；WKWebView 只渲染被允许的本机 Relay origin。外部链接交系统浏览器，拒绝未知本地端口与 file URL。
+- App 通过随机端口和私有 ready 文件连接内置服务，不复用固定开发端口；退出须停止主／子项目服务、PTY 并清理 ready／锁。
+- `npm start` 默认 `.local` 与端口 4317；App 默认 `~/Library/Application Support/Relay`。同一数据目录只启动一个服务；隔离验收使用独立数据目录和新建 Git 项目。
+- 项目选择只允许用户认证。原生桥校验主框架和已授权 origin；返回值不缓存控制台凭据。切换项目不调用模型，不覆盖原项目或跨项目复制原生 ID。
+
+### 会话、任务与权限
+
+- 每个聊天独立成员身份与设置，共享项目串行队列。成员原生 ID 和启动目录固定；召集、任务、消息、评审及后续需求明确接续。
+- 不使用最近会话、fork、恢复失败后隐式新建或新增成员时重建已有会话。凭据可轮换，原生 ID 不变；任务状态以持久化结构化事件为准。
+- 新团队默认完全访问，缺失权限字段的旧团队保留原生审批。只修改 Relay 子进程，不改全局账号、模型、代理和权限。
+- 完全访问包含项目外文件；worktree 与回写检查不构成强制沙箱。分析依赖文件审计，不能宣称强制只读。
+- 执行、排队、检查或待恢复时禁止改团队。Agent 消息不能代替用户提升权限；登录、风险声明、系统授权和组织限制保留人工入口。
+- Anti 使用完整模型 ID，不单独传 effort。Claude Hook 的连接重试、身份校验与完成状态分开处理；重试不意味着重新派单或任务完成。
+
+### 文件与回写
+
+- 快照包含需求开始时的未提交、未忽略文件；原项目 HEAD、分支、暂存区和已有改动必须保留。
+- 外部项目测试前重新记录磁盘／HEAD／分支／暂存区基线；只在新建隔离 Git 项目做默认真实联测。
+- 代码成果经独立检查、非作者评审（单成员如实说明无交叉评审）和候选整合后才回写。遇人工修改、路径碰撞或冲突暂停，不能强制覆盖。
+- 分析只交报告和文件依据，不能虚构代码提交或测试。未识别测试入口时明确“未执行自动测试”。
+- 改调度、身份接续、快照、导入或回写时，优先覆盖持久状态和真实文件保护；失败证据保留。
+
+### 界面与记录
+
+- 主界面保持对话式；任务、成员交流与真实终端在需求下默认折叠，不引入手工角色、人工计划批准或任务表单。
+- 阅读完全手动；状态更新不能抢焦点、关闭交流区或自动滚动。最终结论在协作区下方，安全渲染 Markdown 并保留原文。
+- 归档／删除要求无执行、排队、检查或待恢复。删除需用户确认，只删除 Relay 记录，不删除项目或 CLI 全局历史。
+- 数据导入由用户明确触发，先备份；不自动复制开发数据，不自动恢复旧任务。
+
+## 文档与发布
+
+- 根目录放产品、贡献、安全、Agent 和交接入口；专项说明放 `docs/`，GitHub 表单放 `.github/`。更新现有事实，不积累重复旧版文档。
+- 不提交 `.local/`、用户数据库、CLI 凭据、ready token、私有日志、原始截图或本机绝对路径。私有交接不能直接进入公开仓库；使用 `export-public.mjs` 白名单与审计。
+- 版本和 build number 单调递增。公开标签与资产不可覆盖；文档可单独更新 main。当前 0.1.3 是 ad-hoc、未公证、关闭自动更新的预览版。
+- 正式发布须分别核对 arm64、实际最低系统版本、Developer ID、公证、DMG 校验和签名 appcast；无发布凭据不得启用生产更新或声称完成正式发布。EdDSA 私钥仅存发布机／CI Secret，App Resources 不含凭据、`.env` 或 SQLite 日志。
+- 交付说明改动、实际检查、结果和未验收边界。夹具、真实 CLI、原生手工和干净机器证据分开记录；未运行的检查不得写“通过”。
+
+贡献流程见 [CONTRIBUTING](CONTRIBUTING.md)，预览发布见 [RELEASING](docs/RELEASING.md)。不要将个人机器的 skill 路径或工具偏好写入公共 Agent 指南。

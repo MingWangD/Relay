@@ -29,6 +29,8 @@ await mkdir(output, { recursive: true });
 const files = [
   ".gitignore",
   "README.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
   "LICENSE",
   "THIRD_PARTY_NOTICES.md",
   "index.html",
@@ -56,8 +58,22 @@ for (const dir of ["src", "test", "scripts", "macos"])
         .split("/")
         .some((x) => blocked.has(x)),
   });
+await mkdir(join(output, ".github/ISSUE_TEMPLATE"), { recursive: true });
+for (const f of [
+  "ISSUE_TEMPLATE/bug_report.yml",
+  "ISSUE_TEMPLATE/feature_request.yml",
+  "ISSUE_TEMPLATE/config.yml",
+  "PULL_REQUEST_TEMPLATE.md",
+])
+  await cp(join(root, ".github", f), join(output, ".github", f));
 await mkdir(join(output, "docs"));
 for (const f of [
+  "README.md",
+  "INSTALLATION.md",
+  "USAGE.md",
+  "TROUBLESHOOTING.md",
+  "DEVELOPMENT.md",
+  "ARCHITECTURE.md",
   "REQUIREMENTS.md",
   "DESIGN.md",
   "TESTING.md",
@@ -65,16 +81,36 @@ for (const f of [
   "RELEASE_NOTES.md",
 ])
   await cp(join(root, "docs", f), join(output, "docs", f));
-await cp(
-  join(root, "docs/PUBLIC_VALIDATION.md"),
-  join(output, "docs/VALIDATION.md"),
+// Private workspaces provide a curated public summary; public clones already
+// contain the safe summary as VALIDATION.md. Never copy a private handoff.
+let validation = join(root, "docs/PUBLIC_VALIDATION.md");
+try {
+  await lstat(validation);
+} catch (e) {
+  if (e.code !== "ENOENT") throw e;
+  validation = join(root, "docs/VALIDATION.md");
+  const summary = await readFile(validation, "utf8");
+  if (!/^# Relay[^\n]*验收摘要(?:\r?\n|$)/.test(summary))
+    throw Error("A curated public validation summary is required");
+}
+await cp(validation, join(output, "docs/VALIDATION.md"));
+const agents = await readFile(join(root, "AGENTS.md"), "utf8");
+const agentStart = agents.indexOf("# Relay：Agent");
+if (agentStart < 0) throw Error("Relay agent guide header is missing");
+await writeFile(join(output, "AGENTS.md"), agents.slice(agentStart));
+const { version } = JSON.parse(
+  await readFile(join(root, "package.json"), "utf8"),
 );
-let agents = await readFile(join(root, "AGENTS.md"), "utf8");
-agents = agents.slice(agents.indexOf("# Relay：Agent"));
-await writeFile(join(output, "AGENTS.md"), agents);
 await writeFile(
   join(output, "HANDOFF.md"),
-  "# Relay 开发入口\n\n当前为 0.1.3／build 4 开发预览版。先读 AGENTS.md 与 README.md；架构、测试、当前验收及发布流程分别见 docs/DESIGN.md、TESTING.md、VALIDATION.md、RELEASING.md。\n\n后续重点：Developer ID、公证、签名更新、干净机器／macOS 13.5 实机验收，以及多模型长时压力。私有原始证据不公开，恢复需求必须重新核对进程、工作区和原生身份，不能自动重跑。\n",
+  `# Relay 开发入口
+
+当前源码版本 ${version}。安装与产品说明见 [README](README.md)，开发约束见 [AGENTS](AGENTS.md)，专项文档见 [文档索引](docs/README.md)。
+
+当前验收事实见 [VALIDATION](docs/VALIDATION.md)，发布步骤见 [RELEASING](docs/RELEASING.md)。公开仓库不包含私有原始证据或本机进程状态；开始恢复前重新核对进程、数据目录锁、工作区和原生身份，不自动重跑旧需求。
+
+后续重点：干净机器／最低系统版本、默认 Gatekeeper 首次授权、Dock／切换器与最小化恢复、Developer ID／公证及签名更新。是否完成以验收摘要为准，不能从构建成功推导。
+`,
 );
 async function audit(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
