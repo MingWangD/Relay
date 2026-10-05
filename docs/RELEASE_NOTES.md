@@ -24,3 +24,9 @@ App 自带 Node。Git 与所需的 Codex、Antigravity、Claude Code CLI 需自�
 新团队默认“完全访问”，可读写当前用户可访问的文件，包括项目外文件；也可选择“原生审批”。只作用于 Relay 启动的子进程，不更改 CLI 全局权限或账号。数据存于 `~/Library/Application Support/Relay`，首次启动不会导入其他数据；原生菜单导入会先备份。
 
 此预览版未完成 Developer ID、公证、生产自动更新、干净机器和 macOS 13.5 实机验收。部分 CLI 保留自己的目录信任或工具提示，需按原生入口处理。真实验收摘要见 [VALIDATION](https://github.com/MingWangD/Relay/blob/v0.1.3/docs/VALIDATION.md)。
+
+## 发布后下载验证
+
+DMG、ZIP 和校验文件已通过无需 GitHub 登录的下载验证；两个安装文件校验一致。ZIP 解包后的 App 在隔离数据目录实际启动、连接服务并正常退出。无痕 Chrome 下载 DMG 及 Finder 安装复制保留系统隔离属性。
+
+当前验收时本机 Gatekeeper 处于关闭状态；本轮未修改此设置。因此默认 Gatekeeper 首次拦截／授权仍未完成实机验收。请按上方 Apple 单个可信 App 流程操作，不修改全局安全设置。公开验收后续记录见 [当前验收摘要](https://github.com/MingWangD/Relay/blob/main/docs/VALIDATION.md)，版本源码固定为 v0.1.3／5ef6b24。

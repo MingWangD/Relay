@@ -28,3 +28,16 @@
 ## 保留边界
 
 公开开发版不包含 CLI 登录信息、用户数据库或私有原始证据。没有 Developer ID、公证、生产 EdDSA 更新、干净机器、macOS 13.5 实机或八模型长时压力结论。首次打开遵循 README 的 Apple 单个可信 App 流程，系统授权由用户操作。
+
+## 公开发布与下载复验
+
+2026-10-05，公开仓库 MingWangD/Relay（MIT），Pre-release v0.1.3 已公开。标签源码 commit 为 5ef6b24b6d0bff134729f535f8ee216ebdf9fa18；源码从独立目录安装依赖并构建，81 项检查、Swift 4 项和包内服务 smoke 通过。草稿上传全部资产后重新下载校验，验证后公开；没有替换已发布资产或标签。
+
+DMG、ZIP、SHA256SUMS 的匿名请求均 HTTP 200。两个文件 SHA-256 与构建清单及 GitHub 摘要一致，ZIP 解包后的权限、框架链接和签名完整，原生 App 实际启动并连接本地服务，关闭后锁、ready 与进程清理。
+
+无痕 Chrome 实际下载 DMG，校验一致，带系统隔离属性；通过 Finder 复制到隔离安装目录后属性保持。该机器只读安全检查显示 Gatekeeper **原本为 assessments disabled**，本轮未更改全局安全设置；因此不能用本机无提示启动证明默认 Gatekeeper 的首次拦截或用户授权路径。浏览器下载副本的原生首次打开，以及 Dock／切换器／最小化恢复仍待人工确认。README 的 Apple 官方单个可信 App 流程保留，不提供关闭 Gatekeeper 或删除隔离属性的脚本。
+
+```text
+d66826e3c1d3d0b019065a456b5b91897d764464fb5c1967514a70fb4bf27aa2  Relay-0.1.3-macos-arm64.dmg
+cf5a1eb6b65796f74b69ef474b11bcdbbc1de9e4efeb86083cfac73e6061083a  Relay-0.1.3-macos-arm64.zip
+```
