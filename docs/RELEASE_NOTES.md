@@ -28,3 +28,5 @@ App 内置 Node；Git 和所用 CLI 需自行安装、登录及配置。选择�
 ad-hoc 签名、未经公证，生产自动更新关闭。首次打开核对来源及摘要后，按 [Apple 单个可信 App 授权说明](https://support.apple.com/en-us/102445) 操作；不修改全局安全设置。
 
 类型检查、生产／Swift release 构建、96 项服务／打包、35 项浏览器夹具、4 项 Swift 实文件导入检查及包内 Node／PTY smoke 通过。实际执行事实与尚未验收场景见 [VALIDATION](https://github.com/MingWangD/Relay/blob/v0.1.5/docs/VALIDATION.md)。干净机器、macOS 13.5 实机、默认 Gatekeeper 首次授权、Developer ID、公证及正式自动更新仍待验收。
+
+发布后匿名下载摘要一致，下载 App 原生启动及菜单／快捷键退出复验通过。首次快捷键退出曾遗留死亡 PID 锁；重启自动回收，原因尚未确认，保留为后续调查项。发布后完整记录见 [当前验收摘要](https://github.com/MingWangD/Relay/blob/main/docs/VALIDATION.md)；文档更新不改变标签与安装包。
