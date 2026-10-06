@@ -41,6 +41,118 @@ async function open(page: import("@playwright/test").Page) {
   await page.goto(`${app.url}/#token=${f.service.auth.consoleToken}`);
   await expect(page.locator("#project-button")).not.toContainText("选择项目");
 }
+test("IME candidate confirmation never submits the composer", async ({
+  page,
+}) => {
+  await open(page);
+  const input = page.locator("#prompt");
+  await input.fill("如图");
+  const prevented = await input.evaluate((el) => {
+    el.dispatchEvent(
+      new CompositionEvent("compositionstart", { bubbles: true }),
+    );
+    const event = new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      isComposing: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    el.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(prevented, "IME owns candidate-confirmation Enter").toBe(false);
+  await expect(input).toHaveValue("如图");
+  expect(f.store.state.userRequests).toHaveLength(0);
+  expect(f.runtime.starts).toHaveLength(0);
+});
+
+test("WebKit compositionend before keydown with keyCode 229 never sends", async ({
+  page,
+}) => {
+  await open(page);
+  const input = page.locator("#prompt");
+  await input.fill("如图");
+  const prevented = await input.evaluate((el) => {
+    el.dispatchEvent(
+      new CompositionEvent("compositionstart", { bubbles: true }),
+    );
+    el.dispatchEvent(
+      new CompositionEvent("compositionend", { data: "如图", bubbles: true }),
+    );
+    const event = new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      keyCode: 229,
+      isComposing: false,
+      bubbles: true,
+      cancelable: true,
+    });
+    el.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(prevented).toBe(false);
+  await expect(input).toHaveValue("如图");
+  expect(f.store.state.userRequests).toHaveLength(0);
+  await input.press("Shift+Enter");
+  await expect(input).toHaveValue("如图\n");
+  expect(f.store.state.userRequests).toHaveLength(0);
+  await input.press("Enter");
+  await expect(page.locator(".user-message")).toContainText("如图");
+  expect(f.store.state.userRequests).toHaveLength(1);
+});
+
+test("sidebar shortcut follows native commands and leaves IME keys alone", async ({
+  page,
+}) => {
+  await open(page);
+  await page.keyboard.press("Meta+b");
+  await expect(page.locator("#chat-sidebar")).toBeHidden();
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent("relay:native-command", { detail: "sidebar" }),
+    ),
+  );
+  await expect(page.locator("#chat-sidebar")).toBeVisible();
+  await page.locator("#prompt").evaluate((el) =>
+    el.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "b",
+        metaKey: true,
+        isComposing: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    ),
+  );
+  await expect(page.locator("#chat-sidebar")).toBeVisible();
+});
+
+test("manual takeover survives quoted credential text in persisted model output", async ({
+  page,
+}) => {
+  f.service.collaboration.submit("查看模型输出并人工接管");
+  await until(() => f.runtime.starts.length > 0);
+  f.store.mutate((s) => {
+    s.agents[0].error = 'password=demo"quoted" api_key=demo\\path';
+  });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await open(page);
+  await page.locator(".process > summary").click();
+  await page.getByRole("button", { name: "查看真实终端", exact: true }).click();
+  await page
+    .getByRole("button", { name: "人工接管", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("button", { name: "退出人工接管", exact: true }).first(),
+  ).toBeVisible();
+  expect(f.store.state.agents[0].manual).toBe(true);
+  await expect(page.locator("#toasts")).not.toContainText("JSON");
+  expect(errors).toEqual([]);
+});
+
 test("one prompt starts collaboration without manual configuration; live events preserve composer focus", async ({
   page,
 }) => {
@@ -1140,11 +1252,11 @@ test("desktop native picker cancels locally and sends the chosen path to the aut
           relayPicker: {
             postMessage: async () => {
               const state = window as Window & {
-                  pickerResult?: { cancelled?: boolean; path?: string };
-                  pickerCalls?: number;
+                pickerResult?: { cancelled?: boolean; path?: string };
+                pickerCalls?: number;
               };
-                state.pickerCalls = (state.pickerCalls ?? 0) + 1;
-                return state.pickerResult ?? { cancelled: true };
+              state.pickerCalls = (state.pickerCalls ?? 0) + 1;
+              return state.pickerResult ?? { cancelled: true };
             },
           },
         },

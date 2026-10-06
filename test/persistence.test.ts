@@ -119,3 +119,25 @@ test("legacy chat migration persists one identity immediately and binds only rep
   ]);
   second.close();
 });
+
+test("credential text with quotes never corrupts state or manual takeover", async (t) => {
+  const f = await fixture();
+  t.after(f.cleanup);
+  const agent = f.agent();
+  // Model output is ordinary text: redact its values before JSON serialization.
+  const text =
+    'password=demo\"quoted\" api_key=demo\\path authorization=Bearer demo-secret';
+  assert.doesNotThrow(() =>
+    f.store.mutate((s) => {
+      s.agents[0].error = text;
+    }),
+  );
+  await f.service.manual(agent, true);
+  const state = f.store.publicState();
+  assert.equal(state.agents[0].manual, true);
+  assert.ok(state.agents[0].error!.includes("[REDACTED]"));
+  assert.ok(!state.agents[0].error!.includes("demo-secret"));
+  assert.equal(f.store.state.agents[0].error, text);
+  assert.deepEqual(state.requests, {});
+  assert.doesNotThrow(() => JSON.parse(JSON.stringify(state)));
+});

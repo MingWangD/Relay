@@ -293,7 +293,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     NotificationCenter.default.addObserver(self, selector: #selector(nativeCommand(_:)), name: .relayNativeCommand, object: nil)
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      if event.keyCode == 53, event.window === self?.window {
+      let composing = (event.window?.firstResponder as? NSTextInputClient)?.hasMarkedText() == true
+      if event.keyCode == 53, event.window === self?.window, !composing {
         self?.send("escape")
         return nil
       }
@@ -373,10 +374,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     file.submenu?.addItem(withTitle: "新建聊天", action: #selector(newChat), keyEquivalent: "n").keyEquivalentModifierMask = [.command]
     file.submenu?.addItem(withTitle: "新建项目", action: #selector(selectProject), keyEquivalent: "p").keyEquivalentModifierMask = [.command, .shift]
     file.submenu?.addItem(withTitle: "导入现有 Relay 数据", action: #selector(importData), keyEquivalent: "")
+    file.submenu?.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w").keyEquivalentModifierMask = [.command]
     main.addItem(file)
+    // A nil target lets AppKit route editing to the focused WebKit/native responder.
+    let edit = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
+    edit.submenu = NSMenu(title: "编辑")
+    for (title, selector, key, modifiers) in [
+      ("撤销", "undo:", "z", NSEvent.ModifierFlags.command),
+      ("重做", "redo:", "z", NSEvent.ModifierFlags([.command, .shift])),
+      ("剪切", "cut:", "x", NSEvent.ModifierFlags.command),
+      ("复制", "copy:", "c", NSEvent.ModifierFlags.command),
+      ("粘贴", "paste:", "v", NSEvent.ModifierFlags.command),
+      ("全选", "selectAll:", "a", NSEvent.ModifierFlags.command)
+    ] {
+      if selector == "cut:" { edit.submenu?.addItem(.separator()) }
+      let item = edit.submenu?.addItem(withTitle: title, action: NSSelectorFromString(selector), keyEquivalent: key)
+      item?.keyEquivalentModifierMask = modifiers
+    }
+    main.addItem(edit)
     let view = NSMenuItem(title: "查看", action: nil, keyEquivalent: "")
     view.submenu = NSMenu(title: "查看")
     view.submenu?.addItem(withTitle: "命令面板", action: #selector(commandPalette), keyEquivalent: "k").keyEquivalentModifierMask = [.command]
+    view.submenu?.addItem(withTitle: "显示／隐藏聊天历史", action: #selector(toggleSidebar), keyEquivalent: "b").keyEquivalentModifierMask = [.command]
     view.submenu?.addItem(withTitle: "显示最新", action: #selector(showLatest), keyEquivalent: "")
     view.submenu?.addItem(withTitle: "显示／隐藏终端", action: #selector(toggleTerminals), keyEquivalent: "")
     view.submenu?.addItem(withTitle: "偏好设置", action: #selector(settings), keyEquivalent: ",").keyEquivalentModifierMask = [.command]
@@ -391,6 +410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc private func selectProject() { send("project") }
   @objc private func commandPalette() { send("command-palette") }
   @objc private func showLatest() { send("latest") }
+  @objc private func toggleSidebar() { send("sidebar") }
   @objc private func toggleTerminals() { send("toggle-terminals") }
   @objc private func settings() { send("settings") }
   @objc private func checkForUpdates() {

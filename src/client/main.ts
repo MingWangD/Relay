@@ -1403,7 +1403,7 @@ async function action(name: string, id?: string) {
     case "command-palette": {
       modal(
         "命令面板",
-        `<label class="command-search"><span class="sr-only">过滤命令</span>${icon("search")}<input id="command-filter" type="search" placeholder="搜索命令…" autocomplete="off"></label><div class="command-list" role="menu"><button type="button" data-action="chat-new" role="menuitem">新建聊天 <kbd>⌘N</kbd></button><button type="button" data-action="project" role="menuitem">选择项目 <kbd>⌘⇧P</kbd></button><button type="button" data-action="latest" role="menuitem">查看最新</button><button type="button" data-action="toggle-terminals" role="menuitem">显示／隐藏终端</button><button type="button" data-action="theme" role="menuitem">切换主题</button><button type="button" data-action="archived-chats" role="menuitem">已归档对话</button><button type="button" data-action="advanced" role="menuitem">高级设置</button><button type="button" data-action="check-updates" role="menuitem">检查更新 <kbd>⌘U</kbd></button></div>`,
+        `<label class="command-search"><span class="sr-only">过滤命令</span>${icon("search")}<input id="command-filter" type="search" placeholder="搜索命令…" autocomplete="off"></label><div class="command-list" role="menu"><button type="button" data-action="chat-new" role="menuitem">新建聊天 <kbd>⌘N</kbd></button><button type="button" data-action="project" role="menuitem">选择项目 <kbd>⌘⇧P</kbd></button><button type="button" data-action="sidebar" role="menuitem">显示／隐藏聊天历史 <kbd>⌘B</kbd></button><button type="button" data-action="latest" role="menuitem">查看最新</button><button type="button" data-action="toggle-terminals" role="menuitem">显示／隐藏终端</button><button type="button" data-action="theme" role="menuitem">切换主题</button><button type="button" data-action="archived-chats" role="menuitem">已归档对话</button><button type="button" data-action="advanced" role="menuitem">高级设置</button><button type="button" data-action="check-updates" role="menuitem">检查更新 <kbd>⌘U</kbd></button></div>`,
       );
       const filter = $<HTMLInputElement>("#command-filter");
       filter.addEventListener("input", () => {
@@ -1614,7 +1614,9 @@ $("#composer").addEventListener("submit", async (e) => {
   }
 });
 $("#prompt").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+  // WebKit may end composition before the confirming keydown. 229 still marks IME input.
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     $("#composer").dispatchEvent(new Event("submit", { cancelable: true }));
   }
@@ -1641,6 +1643,7 @@ document.addEventListener("click", (event) => {
   }
 });
 document.addEventListener("keydown", (event) => {
+  if (event.isComposing || event.keyCode === 229) return;
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
     void action("command-palette");
@@ -1658,6 +1661,11 @@ document.addEventListener("keydown", (event) => {
   ) {
     event.preventDefault();
     void action("project");
+    return;
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
+    event.preventDefault();
+    void action("sidebar");
     return;
   }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "u") {
@@ -1691,6 +1699,7 @@ window.addEventListener("relay:native-command", (event) => {
     [
       "chat-new",
       "project",
+      "sidebar",
       "command-palette",
       "latest",
       "toggle-terminals",

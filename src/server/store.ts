@@ -193,7 +193,9 @@ export class Store extends EventEmitter {
     const result = this.state;
     result.requests = {};
     // Logs and model text may contain secrets. Terminal bytes are a separate, authenticated stream.
-    return JSON.parse(redact(JSON.stringify(result)));
+    return JSON.parse(JSON.stringify(result), (_key, value: unknown) =>
+      typeof value === "string" ? redact(value) : value,
+    );
   }
   event(
     state: State,

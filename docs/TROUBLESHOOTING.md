@@ -4,7 +4,7 @@
 
 ## macOS 拦截首次打开
 
-确认下载来自 [v0.1.3 Release](https://github.com/MingWangD/Relay/releases/tag/v0.1.3)，校验安装文件。当前版本为 ad-hoc、未公证预览版。按 [Apple 官方说明](https://support.apple.com/en-us/102445) 对单个可信 App 授权；不关闭全局保护。详见 [安装指南](INSTALLATION.md)。
+确认下载来自 [v0.1.4 Release](https://github.com/MingWangD/Relay/releases/tag/v0.1.4)，校验安装文件。当前版本为 ad-hoc、未公证预览版。按 [Apple 官方说明](https://support.apple.com/en-us/102445) 对单个可信 App 授权；不关闭全局保护。详见 [安装指南](INSTALLATION.md)。
 
 ## 模型目录缺失或 CLI 不可用
 

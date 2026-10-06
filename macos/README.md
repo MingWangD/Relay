@@ -16,7 +16,7 @@ The packager caches a checksum-verified official Node archive under `.local/maco
 
 Outputs: `dist-macos/Relay.app`, `dist-macos/Relay-arm64.dmg`. The DMG includes an Applications link; SHA-256 is printed. A staging build is checked before replacing the previous app.
 
-Current development version: **0.1.3, build 4**. The original three-node icon lives in `Relay.svg`, `Relay.png` and `Relay.icns` under `RelayApp/Resources`; `npm run macos:icon` regenerates ten icon representations using the existing Playwright/Chrome development tools and system `iconutil`. The browser is not shipped in the app.
+Current development version: **0.1.4, build 5**. The original three-node icon lives in `Relay.svg`, `Relay.png` and `Relay.icns` under `RelayApp/Resources`; `npm run macos:icon` regenerates ten icon representations using the existing Playwright/Chrome development tools and system `iconutil`. The browser is not shipped in the app.
 
 The web view sits below a standard draggable title bar. Control-Command-F toggles fullscreen; closing the last window terminates the app through its graceful service-stop path. Project selection uses a main-frame/origin-checked reply bridge and a window-modal NSOpenPanel. Bundle localizations and mixed framework localization make system panel controls follow the user's preferred language.
 

@@ -1,12 +1,18 @@
 # Relay 开发入口
 
-当前发布：**0.1.3 / build 4**，Apple Silicon arm64、macOS 13.5+ 开发预览版。固定版本源码与安装包见 [v0.1.3](https://github.com/MingWangD/Relay/releases/tag/v0.1.3)；main 可包含后续文档及源码改动，不能据此认定安装包已更新。
+当前发布：**0.1.4 / build 5**，Apple Silicon arm64、macOS 13.5+ 开发预览版。固定版本源码与安装包见 [v0.1.4](https://github.com/MingWangD/Relay/releases/tag/v0.1.4)；main 可包含后续文档及源码改动，不能据此认定安装包已更新。
 
 ## 开始接手
 
 阅读 [README](README.md)、[AGENTS](AGENTS.md) 和 [文档索引](docs/README.md)。实际检查与待验收项见 [VALIDATION](docs/VALIDATION.md)，贡献及发布步骤见 [CONTRIBUTING](CONTRIBUTING.md) 与 [RELEASING](docs/RELEASING.md)。
 
 2026-10-05 文档整理：重写产品首页和 Agent 指南，拆分安装、使用、排障、开发及架构说明；新增贡献／安全入口、Issue／PR 模板；公开导出白名单同步这些文件。此轮不改变业务运行行为，不重建已发布安装包或覆盖版本标签。文档相对链接／锚点、npm 命令与格式检查通过；私有工作区和公开克隆均完成导出验证，原始验收摘要回退被拒绝。主要文档经 GitHub Markdown 渲染检查，下载及参考入口可访问。
+
+## 2026-10-06 修复
+
+0.1.4 源码修复 macOS 编辑快捷键、中文输入法候选回车误发送及人工接管 JSON 脱敏错误。原生菜单使用当前响应者；IME 检查覆盖 WebKit 229；状态按字符串值脱敏，不更改数据库格式或已有文本。新增 ⌘B 聊天历史切换与 ⌘W 关闭窗口。
+
+82 服务／打包、31 浏览器夹具、4 Swift，类型检查、生产／Swift release 构建及包内 Node／PTY smoke 通过。真实原生编辑快捷键、中文候选确认及后续回车、关闭窗口通过。本轮未调用真实模型，见 [验收摘要](docs/VALIDATION.md)。版本安装包须从同一标签源码构建，先上传草稿再公开并匿名下载校验；发布记录以 Release 和当前验收摘要为准。用户本机已重新安装旧版；更新前自行结束正在执行的需求，保留数据目录。
 
 ## 后续工作
 
