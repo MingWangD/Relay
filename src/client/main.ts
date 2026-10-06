@@ -1,3 +1,5 @@
+import { AttachmentUI } from "./attachments.ts";
+import { openVisionTerminal } from "./vision-terminal.ts";
 import { renderMarkdown, updateMarkup } from "./reading.ts";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -248,7 +250,7 @@ const agentName = (
 $("#app").innerHTML = `
   <aside id="chat-sidebar" aria-label="聊天历史"></aside><main class="shell"><header class="topbar"><div class="brand"><button class="icon-button" data-action="sidebar" aria-label="切换聊天历史">☰</button><span class="brand-mark">${icon("relay")}</span><strong>Relay</strong></div><div class="context"><div class="project-context"><button class="context-button" data-action="project" id="project-button">${icon("folder")}<span>选择项目</span></button><button class="icon-button project-add" data-action="add-project" aria-label="添加项目" aria-haspopup="true" aria-expanded="false">${icon("plus")}</button><div id="project-menu" class="project-menu menu-list" hidden><button type="button" data-action="project-folder">${icon("folder")} 在此电脑上选择文件夹</button></div></div><button class="context-button" data-action="team" id="team-button">${icon("grid")}<span>Agent</span></button></div><div class="header-end"><span id="connection" role="status" class="connection" aria-label="本地服务正在连接"></span><button class="icon-button command-button" data-action="command-palette" aria-label="打开命令面板" title="命令面板（⌘K）">${icon("search")}</button><button class="icon-button" data-action="more" aria-label="更多">···</button></div></header>
   <section class="conversation" aria-label="项目对话"><div id="chat"></div></section>
-  <div class="composer-wrap"><section id="pending-requests" aria-label="待处理请求" aria-live="polite"></section><button class="text-button latest-button" data-action="latest">查看最新</button><div id="runtime-controls"></div><form id="composer"><label class="sr-only" for="prompt">告诉团队要完成什么</label><textarea id="prompt" rows="2" placeholder="告诉团队要完成什么…" required></textarea><div class="composer-foot"><span id="composer-hint">选择项目和 Agent，开始协作</span><button type="submit" class="send-button" aria-label="发送需求">${icon("chevron")}</button></div></form><p class="input-note">Enter 发送 · Shift + Enter 换行</p></div></main>
+  <div class="composer-wrap"><section id="pending-requests" aria-label="待处理请求" aria-live="polite"></section><button class="text-button latest-button" data-action="latest">查看最新</button><div id="runtime-controls"></div><form id="composer"><label class="sr-only" for="prompt">告诉团队要完成什么</label><textarea id="prompt" rows="2" placeholder="告诉团队要完成什么…"></textarea><div id="draft-images" aria-live="polite"></div><input id="image-picker" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden><div class="composer-foot"><button id="add-image" class="text-button" type="button" aria-label="添加图片">${icon("plus")} 图片</button><span id="composer-hint">选择项目和 Agent，开始协作</span><button type="submit" class="send-button" aria-label="发送需求">${icon("chevron")}</button></div></form><p class="input-note">Enter 发送 · Shift + Enter 换行</p></div></main>
   <section id="process-pane" hidden><div id="terminal-pages"></div><div class="terminal-grid" id="terminals"></div></section><dialog id="dialog" aria-labelledby="dialog-title"></dialog><div id="toasts" aria-live="polite"></div>`;
 const processPane = $("#process-pane");
 function scheduleTerminalFit(panel: TerminalPanel) {
@@ -574,6 +576,7 @@ function render() {
     : "";
   renderPendingRequests();
   renderChat();
+  attachmentUI.render();
   const recent = s.events.filter(
     (e) =>
       e.seq > lastEvent &&
@@ -720,7 +723,7 @@ async function openTeamSettings() {
         .get(provider)!
         .map(
           (m, i) =>
-            `<fieldset class="member-config" data-key="${provider}-${i}" data-index="${i}"><legend>${names[provider]} ${i + 1}</legend><label>模型<select class="model-select" aria-label="${names[provider]} ${i + 1} 模型"></select></label><label ${provider === "antigravity" ? "hidden" : ""}>思考强度<select class="effort-select" aria-label="${names[provider]} ${i + 1} 思考强度"></select></label><p class="effort-note muted" ${provider === "antigravity" ? "hidden" : ""}></p></fieldset>`,
+            `<fieldset class="member-config" data-key="${provider}-${i}" data-index="${i}"><legend>${names[provider]} ${i + 1}</legend><label>模型<select class="model-select" aria-label="${names[provider]} ${i + 1} 模型"></select></label><label ${provider === "antigravity" ? "hidden" : ""}>思考强度<select class="effort-select" aria-label="${names[provider]} ${i + 1} 思考强度"></select></label><p class="vision-note muted"></p><button type="button" class="text-button vision-check">验证识图能力（调用模型）</button><p class="effort-note muted" ${provider === "antigravity" ? "hidden" : ""}></p></fieldset>`,
         )
         .join(""),
     );
@@ -763,6 +766,56 @@ async function openTeamSettings() {
           )
           .join("");
       model.value = m.model ?? "";
+      const visionNote = row.querySelector<HTMLElement>(".vision-note")!;
+      const visionButton =
+        row.querySelector<HTMLButtonElement>(".vision-check")!;
+      const updateVision = () => {
+        const value = m.model
+          ? choices.find((x) => x.id === m.model)?.vision
+          : catalogs.get(provider)?.defaultVision;
+        visionNote.textContent =
+          value?.status === "supported"
+            ? "支持图片：" + value.source
+            : value?.status === "unsupported"
+              ? "当前配置未通过识图验证。"
+              : "图片能力未知；验证通过后可负责识图。";
+      };
+      visionButton.disabled = busy;
+      visionButton.onclick = async () => {
+        visionButton.disabled = true;
+        visionNote.textContent = "正在独立验证图片能力…";
+        const finishDiagnostic = openVisionTerminal(provider, token);
+        try {
+          const response = await fetch("/api/vision-check", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ conversationId: selectedChat, member: m }),
+          });
+          const value = await response.json();
+          if (!response.ok) throw Error(value.error?.message ?? "验证失败");
+          visionNote.textContent =
+            (value.status === "supported"
+              ? "支持图片："
+              : value.status === "unsupported"
+                ? "未通过识图验证："
+                : "尚未确认：") + value.source;
+          const choice = choices.find((x) => x.id === m.model);
+          if (choice) choice.vision = value;
+          else if (!m.model) {
+            const catalog = catalogs.get(provider);
+            if (catalog) catalog.defaultVision = value;
+          }
+        } catch (error) {
+          visionNote.textContent = (error as Error).message;
+        } finally {
+          visionButton.disabled = busy;
+          finishDiagnostic(visionNote.textContent ?? "验证结束");
+        }
+      };
+      updateVision();
       const updateEffort = () => {
         const known = choices.find((x) => x.id === m.model)?.efforts;
         const values = known ?? catalogs.get(provider)?.cliEfforts ?? [];
@@ -786,6 +839,7 @@ async function openTeamSettings() {
         if (provider === "antigravity") m.reasoningEffort = undefined;
         m.model = model.value || undefined;
         updateEffort();
+        updateVision();
       };
       effort.onchange = () => {
         m.reasoningEffort =
@@ -884,7 +938,7 @@ function renderChat() {
           const messages = s.messages.filter(
             (m) => m.requestId === r.id || tasks.some((t) => t.id === m.taskId),
           );
-          return `<article class="request" data-request="${r.id}">${chat.map((m) => `<div data-key="${m.id}" class="${m.role === "user" ? "user-message" : "assistant-message"}">${escape(m.text)}</div>`).join("")}${r.status !== "completed" ? `<div class="request-status ${r.status}" role="status">${labels[r.status]}${r.error ? `<p>${escape(r.error)}</p>` : ""}</div>` : ""}<details class="process" data-process="${r.id}" ${openProcesses.has(r.id) ? "open" : ""}><summary>查看协作过程 <span>${tasks.length ? `${tasks.filter((t) => t.status === "completed").length}/${tasks.length}` : ""}</span></summary><div class="process-content"><div class="process-tasks">${tasks.map((t) => `<div class="internal-task" data-key="${t.id}"><span class="badge ${t.status}">${labels[t.status]}</span><div><strong>${escape(t.title)}</strong><small>${escape(memberName(t.ownerId))}</small>${t.progress || t.error ? `<p>${escape(t.error ?? t.progress)}</p>` : ""}</div></div>`).join("") || '<p class="muted">团队正在协商分工。</p>'}</div>${messages.length ? `<details class="messages" data-key="messages-${r.id}" ${openMessages.has(r.id) ? "open" : ""}><summary>成员交流 · ${messages.length}</summary>${messages.map((m) => `<div class="internal-message" data-key="${m.id}"><small>${escape(m.sourceId === "user" ? "你" : memberName(m.sourceId))} 交给 ${escape(memberName(m.targetId))} · ${labels[m.status]}</small><p>${escape(m.text)}</p></div>`).join("")}</details>` : ""}${(r.id === s.activeRequestId || r.id === requests().at(-1)?.id) && r.agentIds.every((id) => s.agents.some((a) => a.id === id)) ? `<button class="text-button terminal-toggle" data-action="terminals" data-id="${r.id}">${icon("terminal")} ${terminalsOpen && processId === r.id ? "收起终端" : "查看真实终端"}</button><div class="terminal-slot" data-slot="${r.id}"></div>` : '<p class="muted">历史过程记录；原生终端仅展示最近会话。</p>'}</div></details>${r.summary ? '<section class="request-summary" data-key="summary-' + r.id + '"><h2>最终结论</h2>' + renderMarkdown(r.summary) + "</section>" : ""}${r.changedFiles?.length ? `<button class="text-button result-link" data-action="diff" data-id="${r.id}">${icon("branch")} 查看改动 · ${r.changedFiles.length} 个文件</button>` : r.status === "waiting" && tasks.some((t) => t.kind === "code" && t.commit) ? `<button class="text-button" data-action="diff" data-id="${r.id}">查看保留的成果差异</button>` : ""}</article>`;
+          return `<article class="request" data-request="${r.id}">${chat.map((m) => `<div data-key="${m.id}" class="${m.role === "user" ? "user-message" : "assistant-message"}">${escape(m.text)}${attachmentUI.markup(m.attachmentIds)}</div>`).join("")}${r.status !== "completed" ? `<div class="request-status ${r.status}" role="status">${labels[r.status]}${r.error ? `<p>${escape(r.error)}</p>` : ""}</div>` : ""}<details class="process" data-process="${r.id}" ${openProcesses.has(r.id) ? "open" : ""}><summary>查看协作过程 <span>${tasks.length ? `${tasks.filter((t) => t.status === "completed").length}/${tasks.length}` : ""}</span></summary><div class="process-content"><div class="process-tasks">${tasks.map((t) => `<div class="internal-task" data-key="${t.id}"><span class="badge ${t.status}">${labels[t.status]}</span><div><strong>${escape(t.title)}</strong><small>${escape(memberName(t.ownerId))}</small>${t.progress || t.error ? `<p>${escape(t.error ?? t.progress)}</p>` : ""}</div></div>`).join("") || '<p class="muted">团队正在协商分工。</p>'}</div>${messages.length ? `<details class="messages" data-key="messages-${r.id}" ${openMessages.has(r.id) ? "open" : ""}><summary>成员交流 · ${messages.length}</summary>${messages.map((m) => `<div class="internal-message" data-key="${m.id}"><small>${escape(m.sourceId === "user" ? "你" : memberName(m.sourceId))} 交给 ${escape(memberName(m.targetId))} · ${labels[m.status]}</small><p>${escape(m.text)}</p></div>`).join("")}</details>` : ""}${(r.id === s.activeRequestId || r.id === requests().at(-1)?.id) && r.agentIds.every((id) => s.agents.some((a) => a.id === id)) ? `<button class="text-button terminal-toggle" data-action="terminals" data-id="${r.id}">${icon("terminal")} ${terminalsOpen && processId === r.id ? "收起终端" : "查看真实终端"}</button><div class="terminal-slot" data-slot="${r.id}"></div>` : '<p class="muted">历史过程记录；原生终端仅展示最近会话。</p>'}</div></details>${r.summary ? '<section class="request-summary" data-key="summary-' + r.id + '"><h2>最终结论</h2>' + renderMarkdown(r.summary) + "</section>" : ""}${r.changedFiles?.length ? `<button class="text-button result-link" data-action="diff" data-id="${r.id}">${icon("branch")} 查看改动 · ${r.changedFiles.length} 个文件</button>` : r.status === "waiting" && tasks.some((t) => t.kind === "code" && t.commit) ? `<button class="text-button" data-action="diff" data-id="${r.id}">查看保留的成果差异</button>` : ""}</article>`;
         })
         .join("");
   if (lastChatMarkup === markup) {
@@ -903,6 +957,7 @@ function renderChat() {
   );
   const anchorTop = anchor?.getBoundingClientRect().top;
   updateMarkup($("#chat"), markup);
+  attachmentUI.hydrate();
   lastChatMarkup = markup;
   $("#chat")
     .querySelectorAll<HTMLDetailsElement>("[data-process]")
@@ -1587,13 +1642,26 @@ async function action(name: string, id?: string) {
       break;
   }
 }
+const attachmentUI = new AttachmentUI(
+  () => ({ chatId: selectedChat, token, state }),
+  toast,
+);
 $("#composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   const input = $<HTMLTextAreaElement>("#prompt");
   const text = input.value.trim();
-  if (!text) return;
+  let attachmentIds: string[];
+  try {
+    attachmentIds = attachmentUI.ids();
+  } catch (error) {
+    toast((error as Error).message);
+    return;
+  }
+  if (!text && !attachmentIds.length) return;
+  const sendingChat = selectedChat;
   const button = $<HTMLButtonElement>(".send-button");
   button.disabled = true;
+  attachmentUI.lock(true);
   try {
     if (!state?.project) throw new Error("请先选择项目");
     if (!members().length) {
@@ -1602,15 +1670,17 @@ $("#composer").addEventListener("submit", async (e) => {
     }
     await api(activeRequest() && !queueNext ? "supplement" : "request", {
       text,
+      attachmentIds,
     });
-    input.value = "";
+    attachmentUI.sent(sendingChat);
+    if (selectedChat === sendingChat) input.value = "";
     saveView();
     queueNext = false;
     input.focus();
   } catch (e) {
     toast((e as Error).message);
   } finally {
-    button.disabled = false;
+    attachmentUI.lock(false);
   }
 });
 $("#prompt").addEventListener("keydown", (e) => {

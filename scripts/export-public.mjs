@@ -76,6 +76,7 @@ for (const f of [
   "ARCHITECTURE.md",
   "REQUIREMENTS.md",
   "DESIGN.md",
+  "PERFORMANCE.md",
   "TESTING.md",
   "RELEASING.md",
   "RELEASE_NOTES.md",

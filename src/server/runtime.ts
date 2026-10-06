@@ -23,7 +23,12 @@ import {
   claudeEnvironmentKeys,
 } from "./claude-environment.ts";
 
+export const imageInput = (text: string, images: string[] = []) => [
+  { type: "text", text },
+  ...images.map((path) => ({ type: "localImage", path })),
+];
 export interface StartOptions {
+  images?: string[];
   agent: Agent;
   cwd: string;
   prompt?: string;
@@ -49,7 +54,12 @@ export interface RuntimeEvent {
 }
 export interface Runtime extends EventEmitter {
   start(options: StartOptions): Promise<{ pid: number; sessionId?: string }>;
-  send(agentId: string, text: string, token?: string): Promise<boolean>;
+  send(
+    agentId: string,
+    text: string,
+    token?: string,
+    images?: string[],
+  ): Promise<boolean>;
   interrupt(agentId: string): Promise<void>;
   stop(agentId: string): Promise<void>;
   write(agentId: string, data: string): void;
@@ -503,7 +513,7 @@ export class NativeRuntime extends EventEmitter implements Runtime {
         rpc.on("event", captureEvent);
         await rpc.call("turn/start", {
           threadId: sessionId,
-          input: [{ type: "text", text: options.prompt }],
+          input: imageInput(options.prompt ?? "", options.images),
           model: options.agent.model,
           effort: options.agent.reasoningEffort,
         });
@@ -937,7 +947,12 @@ export class NativeRuntime extends EventEmitter implements Runtime {
     for (const event of earlyEvents) handleRpcEvent(event);
     return { pid: terminal.pid, sessionId };
   }
-  async send(id: string, text: string, token?: string): Promise<boolean> {
+  async send(
+    id: string,
+    text: string,
+    token?: string,
+    images?: string[],
+  ): Promise<boolean> {
     const s = this.sessions.get(id);
     ensure(s, "AGENT_OFFLINE", "Agent 未连接");
     if (!s.rpc) {
@@ -947,6 +962,7 @@ export class NativeRuntime extends EventEmitter implements Runtime {
         ...s.options,
         token: token ?? s.options.token,
         prompt: text,
+        images,
         resumeSessionId: s.sessionId,
       };
       await this.stop(id);
@@ -958,12 +974,12 @@ export class NativeRuntime extends EventEmitter implements Runtime {
       await s.rpc.call("turn/steer", {
         threadId: s.sessionId,
         expectedTurnId: s.turnId,
-        input: [{ type: "text", text }],
+        input: imageInput(text, images),
       });
     else
       await s.rpc.call("turn/start", {
         threadId: s.sessionId,
-        input: [{ type: "text", text }],
+        input: imageInput(text, images),
         model: s.options.agent.model,
         effort: s.options.agent.reasoningEffort,
       });

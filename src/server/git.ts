@@ -6,6 +6,11 @@ import { randomUUID } from "node:crypto";
 import type { Project, Task, CommandSpec, TestRun } from "../shared/types.ts";
 import { now } from "../shared/types.ts";
 import { ensure, redact } from "./store.ts";
+import {
+  datedWorkspace,
+  workspaceRoot,
+  workspaceId,
+} from "./workspace-paths.ts";
 const exec = promisify(execFile);
 export async function git(cwd: string, ...args: string[]) {
   const result = await exec(
@@ -48,9 +53,15 @@ export class GitService {
   async createProject(path: string, goal: string): Promise<Project> {
     const info = await this.inspect(path);
     const id = randomUUID();
-    const integrationPath = join(this.dataDir, "workspaces", id, "integration");
+    const createdAt = now();
+    const directory = datedWorkspace(
+      this.dataDir,
+      { id, root: info.root },
+      createdAt,
+    );
+    const integrationPath = join(directory, "integration");
     const integrationBranch = `codex/relay-${id.slice(0, 8)}`;
-    await mkdir(join(this.dataDir, "workspaces", id), { recursive: true });
+    await mkdir(directory, { recursive: true });
     await git(
       info.root,
       "worktree",
@@ -67,15 +78,20 @@ export class GitService {
       base: info.base,
       branch: info.branch,
       integrationPath,
+      workspaceLayout: "dated",
+      workspaceRoot: directory,
       integrationBranch,
       integratedHead: info.base,
       dirtyOriginal: info.dirty,
       plan: { version: 1, goal, checks: [], maxMinutes: 30, retryLimit: 3 },
-      createdAt: now(),
+      createdAt,
     };
   }
   async taskWorkspace(project: Project, taskId: string) {
-    const path = join(this.dataDir, "workspaces", project.id, `task-${taskId}`);
+    const label = project.workspaceLayout
+      ? `${workspaceId(taskId)}${taskId.match(/-v\d+$/)?.[0] ?? ""}`
+      : taskId;
+    const path = join(workspaceRoot(this.dataDir, project), `task-${label}`);
     const branch = `codex/relay-${project.id.slice(0, 8)}-${taskId}`;
     await git(
       project.root,
@@ -97,10 +113,8 @@ export class GitService {
   }
   async planningWorkspace(project: Project, agentId: string) {
     const path = join(
-      this.dataDir,
-      "workspaces",
-      project.id,
-      `agent-${agentId}-${project.integratedHead.slice(0, 12)}`,
+      workspaceRoot(this.dataDir, project),
+      `agent-${project.workspaceLayout ? workspaceId(agentId) : agentId}-${project.integratedHead.slice(0, project.workspaceLayout ? 8 : 12)}`,
     );
     try {
       await git(path, "rev-parse", "--verify", "HEAD");
@@ -229,7 +243,7 @@ export class GitService {
   async candidate(project: Project, task: Task) {
     ensure(task.commit, "NO_COMMIT", "缺少成果版本");
     const id = randomUUID().slice(0, 8);
-    const path = join(this.dataDir, "workspaces", project.id, `merge-${id}`);
+    const path = join(workspaceRoot(this.dataDir, project), `merge-${id}`);
     const branch = `codex/relay-${project.id.slice(0, 8)}-merge-${id}`;
     await git(
       project.root,

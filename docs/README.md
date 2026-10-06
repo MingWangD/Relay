@@ -30,7 +30,7 @@
 | 文档                                    | 内容                               |
 | --------------------------------------- | ---------------------------------- |
 | [验收摘要](VALIDATION.md)               | 实际检查、已知失败与尚未验证的范围 |
-| [发布说明](RELEASE_NOTES.md)            | 0.1.4 功能、安装与限制             |
+| [发布说明](RELEASE_NOTES.md)            | 0.1.5 功能、安装与限制             |
 | [发布流程](RELEASING.md)                | 干净源码、安装资产、草稿与公开验证 |
 | [交接入口](../HANDOFF.md)               | 当前状态与后续工作                 |
 | [第三方声明](../THIRD_PARTY_NOTICES.md) | 实际分发组件及许可文本             |
@@ -45,3 +45,5 @@
 - [Zed 贡献指南](https://github.com/zed-industries/zed/blob/a6169ca96987105be7d60a5051f3155eb6225ccc/CONTRIBUTING.md)：小范围贡献、自查和实际验证。
 - [Codex README](https://github.com/openai/codex/blob/823ea830c0fd418b09ff02d36cad9a1fff66465b/README.md)：安装优先、开发文档分离。
 - [Aider README](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/README.md)：产品识别与快速开始。
+
+- [性能量测](PERFORMANCE.md)：状态缓存与流式哈希的实际收益、内存与退化边界。

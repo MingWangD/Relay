@@ -141,3 +141,38 @@ test("credential text with quotes never corrupts state or manual takeover", asyn
   assert.deepEqual(state.requests, {});
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(state)));
 });
+
+test("revision cache cannot be mutated and failed transactions publish no cached state", async (t) => {
+  const f = await fixture();
+  t.after(f.cleanup);
+  f.store.mutate((s) =>
+    s.events.push({
+      seq: 1,
+      type: "cache",
+      detail: 'api_key="sk-sensitiveexample123" and quote \\"',
+      at: new Date().toISOString(),
+    }),
+  );
+  const first = f.store.publicState(),
+    message = f.store.publicMessage();
+  first.events[0].detail = "mutated";
+  assert.notEqual(f.store.publicState().events[0].detail, "mutated");
+  assert.doesNotMatch(message, /sensitiveexample/);
+  assert.doesNotThrow(() => JSON.parse(message));
+  const db = new DatabaseSync(join(f.data, "state.sqlite"));
+  t.after(() => db.close());
+  db.exec(
+    "CREATE TRIGGER fail_write BEFORE UPDATE ON state BEGIN SELECT RAISE(FAIL,'fixture transaction failure'); END",
+  );
+  let changed = 0;
+  f.store.on("change", () => changed++);
+  assert.throws(
+    () => f.store.mutate((s) => (s.paused = !s.paused)),
+    /fixture transaction failure/,
+  );
+  assert.equal(changed, 0);
+  assert.equal(f.store.publicMessage(), message);
+  db.exec("DROP TRIGGER fail_write");
+  f.store.mutate((s) => (s.paused = !s.paused));
+  assert.notEqual(f.store.publicMessage(), message);
+});

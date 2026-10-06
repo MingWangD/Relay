@@ -8,13 +8,14 @@
 
 Relay 是本机运行的多 Agent 协作桌面 App。选择 Git 项目与成员，描述目标；团队自行规划、分工、沟通、验证、交叉评审和汇总，代码成果经检查后回写项目。
 
-[下载 0.1.4 开发预览版](https://github.com/MingWangD/Relay/releases/tag/v0.1.4) · [使用指南](docs/USAGE.md) · [文档](docs/README.md) · [参与贡献](CONTRIBUTING.md) · [反馈问题](https://github.com/MingWangD/Relay/issues)
+[下载 0.1.5 开发预览版](https://github.com/MingWangD/Relay/releases/tag/v0.1.5) · [使用指南](docs/USAGE.md) · [文档](docs/README.md) · [参与贡献](CONTRIBUTING.md) · [反馈问题](https://github.com/MingWangD/Relay/issues)
 
-![平台：macOS 13.5+ / arm64](https://img.shields.io/badge/macOS-13.5%2B%20%7C%20arm64-333333) [![版本：0.1.4 开发预览](https://img.shields.io/badge/preview-v0.1.4-0e7490)](https://github.com/MingWangD/Relay/releases/tag/v0.1.4) [![许可证：MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![平台：macOS 13.5+ / arm64](https://img.shields.io/badge/macOS-13.5%2B%20%7C%20arm64-333333) [![版本：0.1.5 开发预览](https://img.shields.io/badge/preview-v0.1.5-0e7490)](https://github.com/MingWangD/Relay/releases/tag/v0.1.5) [![许可证：MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ## 为什么使用 Relay
 
 - **一个需求，多名成员。** 混合三类 CLI，团队自动协商；不必手动分配角色或填写任务表单。
+- **图片可以协作。** 选择文件、拖入或粘贴 PNG／JPEG／WebP；支持视觉的成员读取原图，其他成员使用团队识图结果。未知模型先独立验证。
 - **对话可以接续。** 每个聊天保留成员原生会话身份，后续需求继续使用同一组成员。
 - **过程可检查。** 按需展开成员交流、任务和真实 CLI 终端；最终结论与文件改动单独呈现。
 - **保留项目现状。** 从当前磁盘建立快照，在独立工作区执行、检查与评审；回写检测冲突，保留原项目 HEAD、分支与暂存区。
@@ -22,13 +23,13 @@ Relay 是本机运行的多 Agent 协作桌面 App。选择 Git 项目与成员�
 
 ## 下载与安装
 
-当前版本：**0.1.4 / build 5，开发预览版**。仅支持 **Apple Silicon（arm64）、macOS 13.5+**。
+当前版本：**0.1.5 / build 6，开发预览版**。仅支持 **Apple Silicon（arm64）、macOS 13.5+**。
 
 | 文件                                                                                                                   | 用途                                           |
 | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| [Relay-0.1.4-macos-arm64.dmg](https://github.com/MingWangD/Relay/releases/download/v0.1.4/Relay-0.1.4-macos-arm64.dmg) | 推荐安装方式，打开后将 Relay 拖入 Applications |
-| [Relay-0.1.4-macos-arm64.zip](https://github.com/MingWangD/Relay/releases/download/v0.1.4/Relay-0.1.4-macos-arm64.zip) | 解压得到 Relay.app，移动到 Applications        |
-| [SHA256SUMS.txt](https://github.com/MingWangD/Relay/releases/download/v0.1.4/SHA256SUMS.txt)                           | 检查两个安装文件的完整性                       |
+| [Relay-0.1.5-macos-arm64.dmg](https://github.com/MingWangD/Relay/releases/download/v0.1.5/Relay-0.1.5-macos-arm64.dmg) | 推荐安装方式，打开后将 Relay 拖入 Applications |
+| [Relay-0.1.5-macos-arm64.zip](https://github.com/MingWangD/Relay/releases/download/v0.1.5/Relay-0.1.5-macos-arm64.zip) | 解压得到 Relay.app，移动到 Applications        |
+| [SHA256SUMS.txt](https://github.com/MingWangD/Relay/releases/download/v0.1.5/SHA256SUMS.txt)                           | 检查两个安装文件的完整性                       |
 
 > 此版本采用 ad-hoc 签名，未经 Apple 公证，自动更新关闭。首次打开可能被 macOS 拦截。确认来源与校验值后，按 [Apple 官方说明](https://support.apple.com/en-us/102445) 对单个可信 App 进行授权。请保留系统全局安全保护。
 
@@ -38,7 +39,7 @@ Relay 是本机运行的多 Agent 协作桌面 App。选择 Git 项目与成员�
 
 1. 启动 Relay，用项目旁的“＋”选择可信的 Git 项目；首次建议使用已有提交的测试项目。
 2. 配置 1–8 名成员，选择模型、思考强度和团队权限。选择项目、保存团队不会启动模型。
-3. 输入需求，按 Enter 发送；Shift + Enter 换行。团队自动规划与执行。
+3. 输入需求，可添加图片；只发图片也能开始。按 Enter 发送，Shift + Enter 换行。团队自动规划与执行。
 4. 展开“查看协作过程”，查看交流、任务和真实终端；完成后阅读“最终结论”与“查看改动”。
 
 例如：
@@ -46,6 +47,10 @@ Relay 是本机运行的多 Agent 协作桌面 App。选择 Git 项目与成员�
 > 审查项目的启动流程，说明关键文件、已有测试和两个未覆盖风险。自行分工并交叉检查，只分析，不修改文件；未运行的测试不要写成通过。
 
 暂停、审批、恢复、项目切换和数据导入见 [使用指南](docs/USAGE.md)；模型缺失或连接失败见 [排障指南](docs/TROUBLESHOOTING.md)。
+
+图片限制：每条最多 8 张，单张 10 MiB、合计 40 MiB。上传失败时保留草稿；团队须至少有一名已确认支持视觉的成员。能力验证会调用当前模型，不自动更换账号或网关。详情见 [图片使用说明](docs/USAGE.md#图片附件)。
+
+新工作区按本机日期分组；旧工作区与原生启动目录不搬动，保证会话接续。性能量测与保留成本见 [PERFORMANCE](docs/PERFORMANCE.md)。
 
 ## 权限与数据
 

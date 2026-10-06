@@ -34,6 +34,12 @@ export function redact(text: string): string {
 export class Store extends EventEmitter {
   private db: DatabaseSync;
   private current: State;
+  private publicCache?: {
+    revision: number;
+    state: State;
+    json: string;
+    message: string;
+  };
   constructor(path: string) {
     super();
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -67,6 +73,7 @@ export class Store extends EventEmitter {
     this.current.chat ??= [];
     this.current.permissionMode ??= "native";
     this.current.defaultConversationId ??= randomUUID();
+    this.current.attachments ??= [];
     this.current.conversations ??= [];
     if (!this.current.conversations.length)
       this.current.conversations.push({
@@ -186,17 +193,38 @@ export class Store extends EventEmitter {
       throw error;
     }
     this.current = next;
+    this.publicCache = undefined;
     this.emit("change", this.publicState());
     return result;
   }
-  publicState(): State {
-    const result = this.state;
-    result.requests = {};
-    // Logs and model text may contain secrets. Terminal bytes are a separate, authenticated stream.
-    return JSON.parse(JSON.stringify(result), (_key, value: unknown) =>
-      typeof value === "string" ? redact(value) : value,
+  private publicView() {
+    if (this.publicCache?.revision === this.current.revision)
+      return this.publicCache;
+    // Serialize internal plain data synchronously; redact values before JSON escaping.
+    // Cached objects never escape without a defensive clone.
+    const json = JSON.stringify(
+      { ...this.current, requests: {} },
+      (_key, value: unknown) =>
+        typeof value === "string" ? redact(value) : value,
     );
+    const state: State = JSON.parse(json);
+    return (this.publicCache = {
+      revision: this.current.revision,
+      state,
+      json,
+      message: `{"type":"state","state":${json}}`,
+    });
   }
+  publicState(): State {
+    return structuredClone(this.publicView().state);
+  }
+  publicJSON(): string {
+    return this.publicView().json;
+  }
+  publicMessage(): string {
+    return this.publicView().message;
+  }
+
   event(
     state: State,
     type: string,

@@ -1403,3 +1403,191 @@ test("selecting another local folder navigates to isolated console and returning
     "本地服务已连接",
   );
 });
+
+test("image-only file selection sends authenticated original and restores preview", async ({
+  page,
+}) => {
+  const { visionChallenge } = await import("../../src/server/vision.ts");
+  const image = visionChallenge().bytes;
+  f.service.visionFor = async () => ({
+    status: "supported",
+    source: "browser fixture",
+  });
+  await open(page);
+  await page
+    .locator("#image-picker")
+    .setInputFiles({ name: "图片.png", mimeType: "image/png", buffer: image });
+  await expect(page.locator("#draft-images")).toContainText("图片.png");
+  await expect(page.locator(".send-button")).toBeEnabled();
+  await page.locator(".send-button").click();
+  await expect(page.locator(".user-message")).toContainText("请分析附件图片");
+  expect(f.store.state.userRequests[0].attachmentIds).toHaveLength(1);
+  expect(f.store.state.attachments![0].size).toBe(image.length);
+  await expect(page.locator(".message-images img")).toHaveAttribute(
+    "src",
+    /^blob:/,
+  );
+  await page.locator(".message-images button").click();
+  await expect(page.locator(".image-dialog")).toBeVisible();
+  await page.getByRole("button", { name: "关闭图片" }).click();
+  await page.reload();
+  await expect(page.locator(".message-images img")).toHaveAttribute(
+    "src",
+    /^blob:/,
+  );
+});
+
+test("drop and clipboard images upload; unknown vision preserves draft; retry sends once", async ({
+  page,
+}) => {
+  const { visionChallenge } = await import("../../src/server/vision.ts");
+  const base64 = visionChallenge().bytes.toString("base64");
+  f.service.visionFor = async () => ({
+    status: "unknown",
+    source: "browser fixture",
+  });
+  await open(page);
+  await page.locator("#composer").evaluate((el, data) => {
+    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], "drop.png", { type: "image/png" }));
+    el.dispatchEvent(
+      new DragEvent("drop", {
+        dataTransfer: transfer,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, base64);
+  await expect(page.locator("#draft-images")).toContainText("drop.png");
+  await expect(page.locator(".send-button")).toBeEnabled();
+  await page.locator("#prompt").fill("检查两张图");
+  await page.locator("#prompt").evaluate((el, data) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(
+      new File(
+        [Uint8Array.from(atob(data), (c) => c.charCodeAt(0))],
+        "paste.png",
+        { type: "image/png" },
+      ),
+    );
+    el.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: transfer,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, base64);
+  await expect(page.locator("#draft-images .draft-image")).toHaveCount(2);
+  await expect(page.locator(".send-button")).toBeEnabled();
+  await page.locator(".send-button").click();
+  await expect(page.locator("#prompt")).toHaveValue("检查两张图");
+  await expect(page.locator("#draft-images .draft-image")).toHaveCount(2);
+  expect(f.store.state.userRequests).toHaveLength(0);
+  f.service.visionFor = async () => ({
+    status: "supported",
+    source: "browser fixture",
+  });
+  await page.locator(".send-button").click();
+  await expect(page.locator(".user-message")).toContainText("检查两张图");
+  expect(f.store.state.userRequests).toHaveLength(1);
+  expect(f.store.state.userRequests[0].attachmentIds).toHaveLength(2);
+});
+
+test("attachment failure blocks send, removal works and native paste fallback keeps text paste", async ({
+  page,
+}) => {
+  const { visionChallenge } = await import("../../src/server/vision.ts");
+  const base64 = visionChallenge().bytes.toString("base64");
+  await open(page);
+  await page.locator("#image-picker").setInputFiles({
+    name: "broken.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("broken"),
+  });
+  await expect(page.locator("#draft-images")).toContainText("仅支持");
+  await expect(page.locator(".send-button")).toBeDisabled();
+  await page.getByRole("button", { name: "移除 broken.png" }).click();
+  await expect(page.locator("#draft-images .draft-image")).toHaveCount(0);
+  await page.evaluate((data) => {
+    (window as any).webkit = {
+      messageHandlers: {
+        relayClipboard: {
+          postMessage: async () => ({ data, mimeType: "image/png" }),
+        },
+      },
+    };
+  }, base64);
+  await page.locator("#prompt").focus();
+  await page.locator("#prompt").dispatchEvent("paste");
+  await expect(page.locator("#draft-images")).toContainText("粘贴截图.png");
+  await page.locator("#prompt").evaluate((el) => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", "plain text");
+    el.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: transfer,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  await expect(page.locator("#draft-images .draft-image")).toHaveCount(1);
+});
+
+test("vision diagnostic exposes a scoped terminal and requires explicit manual input", async ({
+  page,
+}) => {
+  await open(page);
+  let finish: (() => void) | undefined;
+  const input: string[] = [];
+  await page.route("**/api/vision-check", async (route) => {
+    await new Promise<void>((r) => (finish = r));
+    await route.fulfill({
+      json: { status: "unknown", source: "测试诊断结束" },
+    });
+  });
+  await page.route("**/api/vision-check/*/terminal", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      expect(body.generation).toBe("diagnostic-generation");
+      if (body.data) input.push(body.data);
+      await route.fulfill({ json: { ok: true } });
+    } else
+      await route.fulfill({
+        json: {
+          generation: "diagnostic-generation",
+          seq: 1,
+          cols: 100,
+          rows: 28,
+          data: "Trust isolated fixture?",
+          attention: "目录信任提示",
+          manual: false,
+          approvals: [],
+        },
+      });
+  });
+  await page.locator("#team-button").click();
+  await page
+    .getByRole("button", { name: "验证识图能力（调用模型）" })
+    .first()
+    .click();
+  await expect(page.locator(".vision-dialog")).toBeVisible();
+  await expect(page.locator(".vision-attention")).toContainText("目录信任提示");
+  expect(input).toEqual([]);
+  await page
+    .getByRole("button", { name: "人工接管验证终端", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "退出人工接管", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.type("test");
+  await expect.poll(() => input.join("")).toBe("test");
+  finish!();
+  await expect(page.locator(".vision-attention")).toContainText("测试诊断结束");
+  await expect(
+    page.getByRole("button", { name: "退出人工接管", exact: true }),
+  ).toBeDisabled();
+  expect(f.runtime.starts).toHaveLength(0);
+});

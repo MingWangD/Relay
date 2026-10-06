@@ -1,3 +1,4 @@
+import MarkdownIt from "markdown-it";
 const escape = (s: string) =>
   s.replace(
     /[&<>"']/g,
@@ -6,21 +7,26 @@ const escape = (s: string) =>
         c
       ]!,
   );
+const markdown = new MarkdownIt({
+  html: false,
+  linkify: false,
+  typographer: false,
+});
+markdown.disable("image");
+markdown.validateLink = (url) => /^(https?:\/\/|mailto:)/i.test(url);
+markdown.renderer.rules.link_open = (
+  tokens,
+  index,
+  options,
+  environment,
+  renderer,
+) => {
+  tokens[index].attrSet("target", "_blank");
+  tokens[index].attrSet("rel", "noopener noreferrer");
+  return renderer.renderToken(tokens, index, options);
+};
 function inline(source: string): string {
-  const code: string[] = [];
-  let text = escape(source).replace(/`([^`]+)`/g, (_, s) => {
-    code.push(`<code>${s}</code>`);
-    return `\u0000${code.length - 1}\u0000`;
-  });
-  text = text
-    .replace(/\[([^\]]+)\]\(([^\s)]+)\)/g, (_, label, url) => {
-      if (!/^(https?:\/\/|mailto:)/i.test(url)) return label;
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-    })
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
-  return text.replace(/\u0000(\d+)\u0000/g, (_, i) => code[Number(i)]);
+  return markdown.renderInline(source);
 }
 // All source is escaped. Only these elements and safe link schemes enter the DOM.
 export function renderMarkdown(source: string): string {

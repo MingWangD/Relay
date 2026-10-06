@@ -1,10 +1,6 @@
 :root {
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Text",
-    "PingFang SC",
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
   font-synthesis: none;
   font-size: 14px;
   color-scheme: dark;
@@ -1337,7 +1333,10 @@ dialog[data-archives] .dialog-body {
 .context-button,
 .icon-button {
   border-radius: 7px;
-  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease;
 }
 .context-button:hover,
 .icon-button:hover {
@@ -1368,7 +1367,9 @@ dialog[data-archives] .dialog-body {
   border-radius: 8px;
   background: var(--canvas);
 }
-.command-search .icon { color: var(--secondary); }
+.command-search .icon {
+  color: var(--secondary);
+}
 .command-search input {
   width: 100%;
   border: 0;
@@ -1392,15 +1393,127 @@ dialog[data-archives] .dialog-body {
   text-align: left;
 }
 .command-list button:hover,
-.command-list button:focus-visible { background: var(--accent-soft); }
+.command-list button:focus-visible {
+  background: var(--accent-soft);
+}
 kbd {
   color: var(--secondary);
   font-family: "SFMono-Regular", Menlo, monospace;
   font-size: 11px;
 }
 .terminal-grid,
-.xterm { background: #0d1016; }
+.xterm {
+  background: #0d1016;
+}
 @media (prefers-reduced-motion: reduce) {
   .context-button,
-  .icon-button { transition: none; }
+  .icon-button {
+    transition: none;
+  }
+}
+
+/* Attachments keep conversation reading and terminal layout independent. */
+#draft-images,
+.message-images {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+#draft-images:empty {
+  display: none;
+}
+.draft-image {
+  width: 112px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.draft-image small {
+  max-width: 112px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  width: 100%;
+}
+.attachment-preview {
+  position: relative;
+  width: 112px;
+  height: 86px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+}
+.attachment-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.image-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  background: var(--surface-elevated);
+}
+.image-status:empty {
+  display: none;
+}
+#composer.image-drop {
+  outline: 2px solid var(--accent);
+}
+#add-image {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+#add-image svg {
+  width: 16px;
+  height: 16px;
+}
+.image-dialog {
+  max-width: 90vw;
+  max-height: 90vh;
+  padding: 12px;
+  background: var(--surface-elevated);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.image-dialog img {
+  display: block;
+  max-width: 85vw;
+  max-height: 80vh;
+  object-fit: contain;
+}
+.image-dialog button {
+  display: block;
+  margin: 0 0 8px auto;
+}
+.image-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+.vision-note {
+  font-size: 12px;
+  margin: 6px 0;
+}
+.vision-check {
+  font-size: 12px;
+}
+
+.vision-dialog {
+  width: min(850px, calc(100vw - 40px));
+}
+.vision-screen {
+  height: 360px;
+  overflow: auto;
+  background: #101215;
+  margin: 12px 0;
 }

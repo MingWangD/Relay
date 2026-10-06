@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
@@ -72,6 +73,35 @@ async function bytes(path: string) {
 }
 const digest = (data: Buffer, mode: string) =>
   createHash("sha256").update(mode).update("\0").update(data).digest("hex");
+// Hash-only paths never retain a whole regular file. Write-back still needs bytes().
+export async function fingerprintFile(
+  path: string,
+): Promise<string | undefined> {
+  try {
+    const stat = await lstat(path);
+    ensure(
+      stat.isFile() || stat.isSymbolicLink(),
+      "UNSUPPORTED_FILE",
+      `不能读取目录：${path}`,
+    );
+    const mode = stat.isSymbolicLink()
+      ? "120000"
+      : stat.mode & 0o111
+        ? "100755"
+        : "100644";
+    const hash = createHash("sha256").update(mode).update("\0");
+    if (stat.isSymbolicLink()) hash.update(await readlink(path));
+    else
+      for await (const chunk of createReadStream(path, {
+        highWaterMark: 128 * 1024,
+      }))
+        hash.update(chunk);
+    return hash.digest("hex");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
 async function safePath(root: string, file: string) {
   const path = resolve(root, file);
   ensure(
@@ -139,8 +169,8 @@ export async function captureSnapshot(
   );
   const fingerprints: Record<string, string> = {};
   for (const f of files) {
-    const value = await bytes(join(root, f));
-    if (value) fingerprints[f] = digest(value.data, value.mode);
+    const fingerprint = await fingerprintFile(join(root, f));
+    if (fingerprint) fingerprints[f] = fingerprint;
   }
   // Never even stage excluded secrets or Relay data into Git's object store.
   const tracked = (await command(root, ["ls-files", "-z"], env))
@@ -157,10 +187,9 @@ export async function captureSnapshot(
       GIT_LITERAL_PATHSPECS: "1",
     });
   for (const file of files) {
-    const value = await bytes(join(root, file));
+    const fingerprint = await fingerprintFile(join(root, file));
     ensure(
-      (value ? digest(value.data, value.mode) : undefined) ===
-        fingerprints[file],
+      fingerprint === fingerprints[file],
       "SNAPSHOT_CHANGED",
       "读取快照时项目文件发生变化，请重新发送",
     );
@@ -437,8 +466,8 @@ export async function auditProjectFiles(
         continue;
       if (entry.isDirectory()) await walk(join(dir, entry.name), path);
       else {
-        const value = await bytes(join(root, path));
-        if (value) result[path] = digest(value.data, value.mode);
+        const fingerprint = await fingerprintFile(join(root, path));
+        if (fingerprint) result[path] = fingerprint;
       }
     }
   }

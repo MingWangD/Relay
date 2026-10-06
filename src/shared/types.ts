@@ -8,7 +8,23 @@ export interface MemberConfig {
   model?: string;
   reasoningEffort?: ReasoningEffort;
 }
+export type VisionCapability = {
+  status: "supported" | "unsupported" | "unknown";
+  source: string;
+};
+export interface Attachment {
+  id: string;
+  conversationId: string;
+  requestId?: string;
+  filename: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  size: number;
+  sha256: string;
+  path: string;
+  createdAt: string;
+}
 export interface ModelChoice {
+  vision?: VisionCapability;
   id: string;
   name: string;
   efforts?: ReasoningEffort[];
@@ -20,6 +36,8 @@ export interface ModelCatalog {
   source: string;
   error?: string;
   cliEfforts?: ReasoningEffort[];
+  defaultModelId?: string;
+  defaultVision?: VisionCapability;
 }
 export interface ApprovalPresentation {
   title: string;
@@ -117,6 +135,8 @@ export interface Project {
   base: string;
   branch: string;
   integrationPath: string;
+  workspaceLayout?: "dated";
+  workspaceRoot?: string;
   integrationBranch: string;
   integratedHead: string;
   dirtyOriginal: boolean;
@@ -217,6 +237,7 @@ export interface AppEvent {
   detail: string;
 }
 export interface State {
+  attachments?: Attachment[];
   conversations: Conversation[];
   defaultConversationId: string;
   userRequests: UserRequest[];
@@ -285,6 +306,18 @@ export type RequestStatus =
   | "failed"
   | "stopped";
 export interface UserRequest {
+  attachmentIds?: string[];
+  vision?: {
+    agentId: string;
+    batches: {
+      id: string;
+      attachmentIds: string[];
+      status: "pending" | "running" | "completed";
+      analysis?: string;
+      readIds?: string[];
+      startedAt?: string;
+    }[];
+  };
   conversationId?: string;
   id: string;
   text: string;
@@ -312,12 +345,13 @@ export interface UserRequest {
   control?: {
     fileAudit?: Record<string, Record<string, string>>;
     agentId: string;
-    kind: "planning" | "review" | "summary";
+    kind: "planning" | "review" | "summary" | "vision";
     taskId?: string;
     startedAt: string;
   };
 }
 export interface ChatMessage {
+  attachmentIds?: string[];
   conversationId?: string;
   id: string;
   requestId?: string;

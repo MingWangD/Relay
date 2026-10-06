@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import WebKit
+import UniformTypeIdentifiers
 import Sparkle
 import Darwin
 import CryptoKit
@@ -137,7 +138,7 @@ private final class NodeServiceController {
   }
 }
 
-private final class WebViewCoordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
+private final class WebViewCoordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply, WKUIDelegate {
   private var ready: RelayReadyEnvelope?
   private var origins = Set<String>()
   private var picker: NSOpenPanel?
@@ -150,6 +151,20 @@ private final class WebViewCoordinator: NSObject, WKNavigationDelegate, WKScript
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage,
                              replyHandler: @escaping (Any?, String?) -> Void) {
+    if message.name == "relayClipboard" {
+      guard permitted(message), let body = message.body as? [String: Any], body["action"] as? String == "pasteImage" else { replyHandler(nil, "拒绝剪贴板请求"); return }
+      guard let view = message.webView else { replyHandler(nil, "网页不可用"); return }
+      view.evaluateJavaScript("document.activeElement && document.activeElement.id === 'prompt'") { focused, error in
+      guard error == nil, focused as? Bool == true else { replyHandler(nil, "仅聊天输入框可粘贴图片"); return }
+      let pasteboard = NSPasteboard.general
+      guard pasteboard.types?.contains(.png) == true || pasteboard.types?.contains(.tiff) == true else { replyHandler(["empty": true], nil); return }
+      guard let image = NSImage(pasteboard: pasteboard), let tiff = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiff), bitmap.pixelsWide * bitmap.pixelsHigh <= 64_000_000,
+            let png = bitmap.representation(using: .png, properties: [:]), png.count <= 10 * 1024 * 1024 else { replyHandler(nil, "截图无效或超过 10 MiB"); return }
+      replyHandler(["data": png.base64EncodedString(), "mimeType": "image/png"], nil)
+      }
+      return
+    }
     guard permitted(message), message.name == "relayPicker",
           let body = message.body as? [String: Any], body["action"] as? String == "pickFolder",
           let window = message.webView?.window else {
@@ -167,6 +182,22 @@ private final class WebViewCoordinator: NSObject, WKNavigationDelegate, WKScript
       if response == .OK, let url = panel.url {
         replyHandler(["path": url.path], nil)
       } else { replyHandler(["cancelled": true], nil) }
+    }
+  }
+
+  func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+    let source = frame.securityOrigin
+    guard frame.isMainFrame, source.protocol == "http", origins.contains("http://\(source.host):\(source.port)"),
+          let window = webView.window, picker == nil else { completionHandler(nil); return }
+    let panel = NSOpenPanel()
+    picker = panel
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+    panel.allowedContentTypes = [.png, .jpeg] + [UTType(filenameExtension: "webp")].compactMap { $0 }
+    panel.beginSheetModal(for: window) { [weak self] response in
+      self?.picker = nil
+      completionHandler(response == .OK ? panel.urls : nil)
     }
   }
 
@@ -275,8 +306,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let configuration = WKWebViewConfiguration()
     configuration.userContentController.add(coordinator, name: "relayNative")
     configuration.userContentController.addScriptMessageHandler(coordinator, contentWorld: .page, name: "relayPicker")
+    configuration.userContentController.addScriptMessageHandler(coordinator, contentWorld: .page, name: "relayClipboard")
     webView = WKWebView(frame: .zero, configuration: configuration)
     webView.navigationDelegate = coordinator
+    webView.uiDelegate = coordinator
     window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
     window.title = "Relay"
     window.titleVisibility = .hidden

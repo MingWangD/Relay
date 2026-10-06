@@ -10,14 +10,14 @@ Relay App 内置 Node；只有源码开发需要另装 Node.js 24+。模型由 C
 
 ## 下载与校验
 
-从 [v0.1.4 Release](https://github.com/MingWangD/Relay/releases/tag/v0.1.4) 下载 DMG（推荐）或 ZIP，同时下载 `SHA256SUMS.txt`。
+从 [v0.1.5 Release](https://github.com/MingWangD/Relay/releases/tag/v0.1.5) 下载 DMG（推荐）或 ZIP，同时下载 `SHA256SUMS.txt`。
 
 在安装文件所在目录检查，例如：
 
 ```bash
-shasum -a 256 Relay-0.1.4-macos-arm64.dmg
+shasum -a 256 Relay-0.1.5-macos-arm64.dmg
 # 使用 ZIP 时：
-shasum -a 256 Relay-0.1.4-macos-arm64.zip
+shasum -a 256 Relay-0.1.5-macos-arm64.zip
 ```
 
 把输出与校验文件中同名条目的完整 64 位值比较；不一致时停止安装并重新下载。校验用于检查文件一致性，不替代 Apple 公证。

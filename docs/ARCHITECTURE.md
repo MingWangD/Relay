@@ -51,3 +51,11 @@ Relay 继承本机 CLI 账号／服务配置，只控制对应子进程。原生
 App 默认数据位于 `~/Library/Application Support/Relay`；开发默认 `.local/`。导入由用户明确触发，校验源服务锁与目录边界，备份目标后复制，失败回滚；源数据保持。
 
 当前 App 嵌入官方 Node arm64 与 Sparkle 2；开发预览版 ad-hoc 签名、未公证、生产更新关闭。正式 Developer ID、公证和签名 appcast 是后续发布条件，不能由源码构建成功推导。构建细节见 [macOS](../macos/README.md)，测试事实见 [VALIDATION](VALIDATION.md)。
+
+## 图片和能力边界
+
+`attachments.ts` 封装格式、限额、原图文件与原子绑定；SQLite 只记录元数据和 ID，图片响应不进入请求幂等缓存或 WebSocket 状态。Codex 原生 `localImage` 与 MCP 图片内容块共用 `Service.imageContext`；只有当前需求指定视觉成员能调用 `read_attachment`。所有工具仍校验认证、成员、会话代次及需求。持久化识图批次控制规划前置条件，运行中补图排队，结构化分析缺失时等待用户处理。
+
+`vision.ts` 合并原生目录与进程内诊断结果，配置身份只在内存做 HMAC，不输出认证值。`vision-check.ts` 使用独立仓库、数据目录、成员及终端；人工操作由用户认证接口控制，验证代次改变或完成后输入失效。诊断不会换模型或重建真实成员会话。
+
+状态脱敏逐字符串处理，按 revision 缓存公开视图及完整 WebSocket 消息。对外 State 防御性克隆；事务成功后才使新缓存可见。SQLite 全量事务、内部克隆、请求及成员序列化比较仍保留。快照普通文件流式哈希保留原有 `sha256(mode + NUL + bytes)`，符号链接不跟随目标，两遍一致性检查仍执行。性能结果见 [PERFORMANCE](PERFORMANCE.md)。

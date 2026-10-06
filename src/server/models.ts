@@ -15,7 +15,10 @@ import {
   withClaudeEnvironment,
 } from "./claude-environment.ts";
 
-const cache = new Map<string, { at: number; value: ModelCatalog }>();
+const cache = new Map<
+  string,
+  { at: number; identity: string; value: ModelCatalog }
+>();
 const pending = new Map<string, Promise<ModelCatalog>>();
 const effortNames: ReasoningEffort[] = [
   "none",
@@ -30,10 +33,13 @@ const effortNames: ReasoningEffort[] = [
 const keyFor = (provider: Provider, root?: string) =>
   `${provider}:${root ?? ""}`;
 
-async function codexModels(): Promise<ModelCatalog["models"]> {
+async function codexModels(
+  root?: string,
+): Promise<Pick<ModelCatalog, "models" | "defaultModelId">> {
   // Catalog-only process: initialize and list, never create a thread or inference turn.
   const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
     stdio: ["pipe", "pipe", "pipe"],
+    ...(root ? { cwd: root } : {}),
   });
   let sequence = 0,
     buffer = "";
@@ -84,6 +90,17 @@ async function codexModels(): Promise<ModelCatalog["models"]> {
       capabilities: { experimentalApi: true },
     });
     child.stdin.write(JSON.stringify({ method: "initialized" }) + "\n");
+    let config: any;
+    try {
+      config = (await call("config/read", { includeLayers: false })).config;
+    } catch {}
+    const custom =
+      (config?.model_provider && config.model_provider !== "openai") ||
+      (config?.model_providers?.[config?.model_provider ?? "openai"]?.base_url && !/^https:\/\/api\.openai\.com(?:\/|$)/.test(config.model_providers[config.model_provider ?? "openai"].base_url)) ||
+      (process.env.OPENAI_BASE_URL &&
+        !/^https:\/\/api\.openai\.com(?:\/|$)/.test(
+          process.env.OPENAI_BASE_URL,
+        ));
     const models: ModelCatalog["models"] = [];
     let cursor: string | undefined;
     do {
@@ -100,10 +117,32 @@ async function codexModels(): Promise<ModelCatalog["models"]> {
             .map((e: any) => e.reasoningEffort)
             .filter((e: ReasoningEffort) => effortNames.includes(e)),
           defaultEffort: m.defaultReasoningEffort,
+          vision: custom
+            ? { status: "unknown", source: "自定义提供商需独立验证视觉能力" }
+            : {
+                status: (m.inputModalities ?? ["text", "image"]).includes(
+                  "image",
+                )
+                  ? "supported"
+                  : "unsupported",
+                source: m.inputModalities
+                  ? "Codex 原生模型目录"
+                  : "Codex 官方旧目录兼容规则",
+              },
+          ...(m.isDefault ? { isDefault: true } : {}),
         });
       cursor = result.nextCursor ?? undefined;
     } while (cursor && models.length < 500);
-    return models;
+    return {
+      models,
+      defaultModelId:
+        config?.model ??
+        (
+          models.find(
+            (m) => (m as typeof m & { isDefault?: boolean }).isDefault,
+          ) ?? models[0]
+        )?.id,
+    };
   } finally {
     clearTimeout(timeout);
     child.kill();
@@ -117,8 +156,16 @@ export async function modelCatalog(
 ): Promise<ModelCatalog> {
   const key = keyFor(provider, root),
     cached = cache.get(key);
-  if (!refresh && cached && Date.now() - cached.at < 60000) return cached.value;
-  if (pending.has(key)) return pending.get(key)!;
+  const { configurationIdentity } = await import("./vision.ts");
+  const identity = await configurationIdentity(provider, root ?? ""),
+    pendingKey = `${key}:${identity}`;
+  if (
+    !refresh &&
+    cached?.identity === identity &&
+    Date.now() - cached.at < 60000
+  )
+    return cached.value;
+  if (pending.has(pendingKey)) return pending.get(pendingKey)!;
   const read = (async (): Promise<ModelCatalog> => {
     try {
       let result: ModelCatalog;
@@ -132,7 +179,7 @@ export async function modelCatalog(
       if (provider === "codex")
         result = {
           provider,
-          models: await codexModels(),
+          ...(await codexModels(root)),
           source: "Codex 原生模型目录",
         };
       else if (provider === "antigravity") {
@@ -211,6 +258,11 @@ export async function modelCatalog(
             (configured?.warning ? `。${configured.warning}` : ""),
         };
       }
+      for (const model of result.models)
+        model.vision ??= {
+          status: "unknown",
+          source: "CLI 未提供视觉能力；需独立验证",
+        };
       if (provider !== "codex") {
         const { stdout } = await promisify(execFile)(
           provider === "claude" ? "claude" : "agy",
@@ -222,7 +274,7 @@ export async function modelCatalog(
           new RegExp(`\\b${e}\\b`).test(match),
         );
       }
-      cache.set(key, { at: Date.now(), value: result });
+      cache.set(key, { at: Date.now(), identity, value: result });
       return result;
     } catch (e) {
       return {
@@ -233,11 +285,11 @@ export async function modelCatalog(
       };
     }
   })();
-  pending.set(key, read);
+  pending.set(pendingKey, read);
   try {
     return await read;
   } finally {
-    pending.delete(key);
+    pending.delete(pendingKey);
   }
 }
 

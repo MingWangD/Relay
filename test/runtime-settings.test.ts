@@ -194,6 +194,7 @@ if(args[0]==='app-server'){
             agent.id,
             "continuation",
             "fresh-continuation-token",
+            [join(root, "supplement.png")],
           ),
           true,
         );
@@ -220,6 +221,16 @@ if(args[0]==='app-server'){
           .split("\n")
           .map((x) => JSON.parse(x));
         if (provider === "codex") {
+          const continuation = lines
+            .filter((x) => ["turn/start", "turn/steer"].includes(x.method))
+            .at(-1);
+          assert.ok(
+            continuation.params.input.some(
+              (x: any) =>
+                x.type === "localImage" &&
+                x.path === join(root, "supplement.png"),
+            ),
+          );
           const thread = lines.find((x) => x.method === "thread/start").params;
           assert.equal(
             thread.approvalPolicy,

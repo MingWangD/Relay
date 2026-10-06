@@ -93,9 +93,88 @@ export async function createHttp(
       ),
     );
   });
+  app.post(
+    "/api/attachments",
+    (req, res, next) => {
+      user(res);
+      next();
+    },
+    express.raw({ type: "application/octet-stream", limit: "10mb" }),
+    async (req, res) => {
+      user(res);
+      const chatId = id.parse(req.query.conversationId);
+      ensure(Buffer.isBuffer(req.body), "IMAGE_BODY", "请使用二进制图片上传");
+      const filename = z
+        .string()
+        .max(1800)
+        .parse(req.headers["x-relay-filename"] ?? "图片");
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(filename);
+      } catch {
+        ensure(false, "IMAGE_FILENAME", "图片文件名编码无效");
+      }
+      res
+        .status(201)
+        .json(await service.attachments.upload(chatId, decoded, req.body));
+    },
+  );
+  app.get("/api/attachments/:id", async (req, res) => {
+    user(res);
+    const { item, bytes } = await service.attachments.read(
+      id.parse(req.params.id),
+      id.parse(req.query.conversationId),
+    );
+    res.setHeader("Content-Security-Policy", "default-src 'none'");
+    res.type(item.mimeType).send(bytes);
+  });
+  app.delete("/api/attachments/:id", async (req, res) => {
+    user(res);
+    await service.attachments.remove(
+      id.parse(req.params.id),
+      id.parse(req.query.conversationId),
+    );
+    res.json({ ok: true });
+  });
+  app.get("/api/vision-check/:provider/terminal", async (req, res) => {
+    user(res);
+    const provider = z
+      .enum(["codex", "claude", "antigravity"])
+      .parse(req.params.provider);
+    const { visionTerminal } = await import("./vision-check.ts");
+    res.json(await visionTerminal(service, provider));
+  });
+  app.post("/api/vision-check/:provider/terminal", async (req, res) => {
+    user(res);
+    const provider = z
+      .enum(["codex", "claude", "antigravity"])
+      .parse(req.params.provider);
+    const body = z
+      .object({
+        generation: z.string().min(1),
+        manual: z.boolean().optional(),
+        data: z.string().max(4096).optional(),
+        approvalId: z.string().optional(),
+        accepted: z.boolean().optional(),
+      })
+      .parse(req.body);
+    const { visionTerminalInput } = await import("./vision-check.ts");
+    res.json(visionTerminalInput(service, provider, body.generation, body));
+  });
+  app.post("/api/vision-check", async (req, res) => {
+    user(res);
+    const body = z
+      .object({ conversationId: id, member: memberSchema })
+      .parse(req.body);
+    const selected = conversation(service.store.state, body.conversationId);
+    const { validateMemberConfig } = await import("./models.ts");
+    await validateMemberConfig(body.member, service.store.state.project?.root);
+    const { verifyVision } = await import("./vision-check.ts");
+    res.json(await verifyVision(service, body.member, selected.permissionMode));
+  });
   app.get("/api/state", (req, res) => {
     user(res);
-    res.json(service.store.publicState());
+    res.type("json").send(service.store.publicJSON());
   });
   app.get("/api/desktop/origin", (req, res) => {
     user(res);
@@ -113,7 +192,7 @@ export async function createHttp(
       ? configuredChannel
       : "development";
     res.json({
-      version: process.env.RELAY_APP_VERSION ?? "0.1.3",
+      version: process.env.RELAY_APP_VERSION ?? "0.1.5",
       build: process.env.RELAY_APP_BUILD ?? "development",
       channel,
       desktop: "macos-arm64",
@@ -125,13 +204,26 @@ export async function createHttp(
       .enum(["codex", "antigravity", "claude"])
       .parse(req.params.provider);
     const { modelCatalog } = await import("./models.ts");
-    res.json(
-      await modelCatalog(
-        provider,
-        service.store.state.project?.root,
-        req.query.refresh === "1",
-      ),
+    const { forgetVision, checkedVision } = await import("./vision.ts");
+    const root = service.store.state.project?.root ?? "";
+    if (req.query.refresh === "1") forgetVision(provider, root);
+    const catalog = await modelCatalog(
+      provider,
+      root,
+      req.query.refresh === "1",
     );
+    res.json({
+      ...catalog,
+      defaultVision:
+        (await checkedVision(provider, undefined, root)) ??
+        catalog.models.find((m) => m.id === catalog.defaultModelId)?.vision,
+      models: await Promise.all(
+        catalog.models.map(async (m) => ({
+          ...m,
+          vision: (await checkedVision(provider, m.id, root)) ?? m.vision,
+        })),
+      ),
+    });
   });
   app.get("/api/report", (req, res) => {
     user(res);
@@ -390,15 +482,39 @@ export async function createHttp(
           return service.collaboration.configureTeam(counts, chatId);
         }
         case "request":
-          return service.collaboration.submit(
-            z.object({ text }).parse(b.data).text,
-            chatId,
+        case "supplement": {
+          const d = z
+            .object({
+              text: z.string().max(16000).default(""),
+              attachmentIds: z.array(id).max(8).default([]),
+            })
+            .parse(b.data);
+          ensure(
+            d.text.trim() || d.attachmentIds.length,
+            "EMPTY_REQUEST",
+            "请填写需求或添加图片",
           );
-        case "supplement":
-          return service.collaboration.supplement(
-            z.object({ text }).parse(b.data).text,
-            chatId,
+          const members = service.store.state.agents.filter(
+            (a) => conversationId(service.store.state, a) === chatId,
           );
+          const reader = d.attachmentIds.length
+            ? await service.visionMember(members.map((a) => a.id))
+            : undefined;
+          const content = d.text.trim() || "请分析附件图片";
+          return b.action === "request"
+            ? service.collaboration.submit(
+                content,
+                chatId,
+                d.attachmentIds,
+                reader,
+              )
+            : service.collaboration.supplement(
+                content,
+                chatId,
+                d.attachmentIds,
+                reader,
+              );
+        }
         case "request-stop":
           return service.collaboration.stop(chatId);
         case "request-resume":
@@ -538,12 +654,31 @@ export async function createHttp(
       "当前需求属于另一对话",
       409,
     );
+    // Image bytes must never enter the persisted idempotency result cache.
+    if (body.tool === "read_attachment") {
+      const args = z.object({ attachmentId: id }).parse(body.arguments);
+      res.json(
+        await service.collaboration.readAttachment(actor, args.attachmentId),
+      );
+      return;
+    }
     const result = await service.request(
       actor,
       body.requestId,
       body,
       async () => {
         switch (body.tool) {
+          case "submit_vision_analysis": {
+            const d = z
+              .object({ requestId: id, batchId: id, analysis: text })
+              .parse(body.arguments);
+            return service.collaboration.submitVision(
+              actor,
+              d.requestId,
+              d.batchId,
+              d.analysis,
+            );
+          }
           case "publish_plan": {
             const d = z
               .object({
@@ -814,8 +949,8 @@ export async function createHttp(
     });
     res.json({ messages });
   });
-  const broadcast = (value: unknown) => {
-    const data = JSON.stringify(value);
+  const broadcast = (value: unknown, serialized?: string) => {
+    const data = serialized ?? JSON.stringify(value);
     for (const client of wss.clients)
       if (client.readyState === WebSocket.OPEN) {
         if (client.bufferedAmount > 2 * 1024 * 1024)
@@ -823,7 +958,8 @@ export async function createHttp(
         else client.send(data);
       }
   };
-  const onChange = (state: unknown) => broadcast({ type: "state", state });
+  const onChange = (state: unknown) =>
+    broadcast({ type: "state", state }, service.store.publicMessage());
   const onTerminal = (packet: unknown) =>
     broadcast({ type: "terminal", ...(packet as object) });
   service.store.on("change", onChange);
@@ -841,9 +977,7 @@ export async function createHttp(
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws));
   });
   wss.on("connection", (ws) => {
-    ws.send(
-      JSON.stringify({ type: "state", state: service.store.publicState() }),
-    );
+    ws.send(service.store.publicMessage());
     ws.on("message", async (raw) => {
       try {
         const b = z

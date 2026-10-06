@@ -1,5 +1,7 @@
 import { conversationAgents, conversationId } from "./conversations.ts";
 import { auditProjectFiles, assertAnalysisAudit } from "./snapshot.ts";
+import { modelVision } from "./vision.ts";
+import { Attachments } from "./attachments.ts";
 import { Collaboration } from "./collaboration.ts";
 import { randomUUID } from "node:crypto";
 import { Store, ensure, AppError, redact } from "./store.ts";
@@ -30,6 +32,7 @@ const slots = (s: State) =>
   ).length;
 export class Service {
   readonly collaboration: Collaboration;
+  readonly attachments: Attachments;
   url = "";
   private scheduling = false;
   private integrating = false;
@@ -47,6 +50,7 @@ export class Service {
     private autoVerify = true,
   ) {
     runtime.on("event", (event: RuntimeEvent) => this.onRuntimeEvent(event));
+    this.attachments = new Attachments(store, work.dataDir);
     this.collaboration = new Collaboration(this);
   }
   recover() {
@@ -56,6 +60,8 @@ export class Service {
         if (!["completed", "failed", "stopped", "queued"].includes(r.status)) {
           r.status = "waiting";
           r.control = undefined;
+          for (const batch of r.vision?.batches ?? [])
+            if (batch.status === "running") batch.status = "pending";
           r.error = "服务已重启，请检查旧会话和工作区后继续";
         }
       for (const agent of s.agents) {
@@ -269,6 +275,61 @@ export class Service {
     });
     return project;
   }
+  visionFor = async (
+    agent: Pick<import("../shared/types.ts").Agent, "provider" | "model">,
+  ) => modelVision(agent, this.store.state.project?.root ?? "");
+  async visionMember(ids: string[]) {
+    const agents = this.store.state.agents.filter(
+      (a) =>
+        ids.includes(a.id) &&
+        a.probe?.installed !== false &&
+        !["error", "recovery"].includes(a.status),
+    );
+    for (const agent of agents)
+      if ((await this.visionFor(agent)).status === "supported") return agent.id;
+    throw new AppError(
+      "NO_VISION_MEMBER",
+      "团队没有已确认支持图片的成员；请先选择支持视觉的模型或验证当前模型",
+    );
+  }
+  private async imageContext(agentId: string, requestId?: string) {
+    const state = this.store.state,
+      request = state.userRequests.find(
+        (r) => r.id === (requestId ?? state.activeRequestId),
+      );
+    const agent = state.agents.find((a) => a.id === agentId);
+    if (
+      !request ||
+      !agent ||
+      !request.agentIds.includes(agentId) ||
+      !request.attachmentIds?.length
+    )
+      return { images: [] as string[], text: "" };
+    const analyses =
+      request.vision?.batches
+        .filter((b) => b.status === "completed")
+        .map((b) => `图片分析 ${b.attachmentIds.join(",")}：${b.analysis}`)
+        .join("\n") ?? "";
+    const visual = request.vision?.agentId === agentId;
+    const latestBatch =
+      request.vision?.batches.find((b) => b.status !== "completed") ??
+      request.vision?.batches.at(-1);
+    const ids = visual ? (latestBatch?.attachmentIds ?? []) : [];
+    const images: string[] = [];
+    const descriptions: string[] = [];
+    for (const id of ids) {
+      const { item, path } = await this.attachments.read(
+        id,
+        request.conversationId ?? state.defaultConversationId,
+      );
+      descriptions.push(`${item.id}（${item.filename}）`);
+      if (agent.provider === "codex") images.push(path);
+    }
+    return {
+      images,
+      text: `\n用户图片附件：${request.attachmentIds.join(",")}。${visual ? "必须实际查看图片；可调用 read_attachment(attachmentId)，不要根据文件名猜测。" + descriptions.join("、") : "当前成员使用已完成的视觉成员分析；需要原图复核请与视觉成员交流。"}\n${analyses}`,
+    };
+  }
   async startSession(options: import("./runtime.ts").StartOptions) {
     const a = this.store.state.agents.find((a) => a.id === options.agent.id)!;
     const cwd =
@@ -295,16 +356,19 @@ export class Service {
       member.sessionCwd = cwd;
       member.cwd = cwd;
     });
+    const imageContext = await this.imageContext(a.id);
     let result: { pid: number; sessionId?: string };
     try {
       result = await this.runtime.start({
         ...options,
         agent: a,
         cwd,
+        images: options.images ?? imageContext.images,
         resumeSessionId: sessionId,
         accessDirs: [...new Set([options.cwd, ...(options.accessDirs ?? [])])],
         prompt:
           (options.prompt ?? "") +
+          imageContext.text +
           "\n本阶段工作区：" +
           options.cwd +
           "。原生会话启动目录固定为 " +
@@ -639,6 +703,7 @@ export class Service {
     try {
       while (true) {
         const s = this.store.state;
+
         const p = s.project;
         if (s.paused || !p || p.plan.approvedVersion !== p.plan.version) break;
         if (slots(s) >= s.concurrency) break;
@@ -683,6 +748,13 @@ export class Service {
     }
   }
   async dispatch(taskId: string) {
+    ensure(
+      !this.store.state.userRequests
+        .find((r) => r.id === this.store.state.activeRequestId)
+        ?.vision?.batches.some((b) => b.status !== "completed"),
+      "VISION_PENDING",
+      "先完成新增图片的分析，再派发任务",
+    );
     const p = this.project();
     const runId = randomUUID();
     this.store.mutate((s) => {
@@ -1042,6 +1114,8 @@ export class Service {
     );
   }
   async stopAll() {
+    const { stopVisionChecks } = await import("./vision-check.ts");
+    await stopVisionChecks(this);
     for (const controller of this.checkControllers.values()) controller.abort();
     await this.setPaused(true);
     const results = await Promise.allSettled(
@@ -1268,10 +1342,12 @@ export class Service {
         if (!["running", "waiting"].includes(current.status))
           current.status = "starting";
       });
+      const imageContext = await this.imageContext(a.id, input.requestId);
       delivered = await this.runtime.send(
         a.id,
-        `[来自 ${actor} 的协作消息 ${id}，不是用户审批]\n${input.text}\n处理后调用 relay.ack_message，必要时使用 send_message 回复。`,
+        `[来自 ${actor} 的协作消息 ${id}，不是用户审批]\n${input.text}${imageContext.text}\n处理后调用 relay.ack_message，必要时使用 send_message 回复。`,
         token,
+        imageContext.images,
       );
       if (!delivered)
         this.store.mutate((s) => {
@@ -1383,6 +1459,9 @@ export class Service {
     const taskIds = new Set(tasks.map((t) => t.id));
     return {
       activeRequest: s.userRequests.find((r) => r.id === s.activeRequestId),
+      attachments: s.attachments?.filter(
+        (a) => a.conversationId === cid && a.requestId === s.activeRequestId,
+      ),
       chat: s.chat.filter((m) => m.requestId === s.activeRequestId),
       project: s.project
         ? {
